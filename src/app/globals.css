@@ -1,0 +1,139 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: #f7f8f5;
+  color: #17221d;
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.builder-preview .proposal-document {
+  box-shadow: 0 18px 50px rgba(23, 34, 29, 0.14);
+  transform-origin: top center;
+}
+
+.builder-preview .proposal-page {
+  min-height: 860px;
+  padding: 40px;
+}
+
+.builder-preview .proposal-page.cover-page {
+  padding: 0;
+}
+
+.builder-preview .cover-sheet {
+  gap: 18px;
+  min-height: 860px;
+  padding: 22px 22px 30px;
+}
+
+.builder-preview .cover-header {
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+}
+
+.builder-preview .cover-hero {
+  height: 220px;
+}
+
+.builder-preview .cover-titleBlock__title {
+  font-size: 2.35rem;
+}
+
+.builder-preview .cover-titleBlock {
+  margin-left: 0;
+}
+
+.builder-preview .cover-titleBlock__subtitle {
+  font-size: 0.9rem;
+}
+
+.builder-preview .cover-meta {
+  grid-template-columns: 1fr;
+  margin-left: 0;
+}
+
+.builder-preview .cover-pair {
+  grid-template-columns: 1fr;
+}
+
+.builder-preview .cover-triade {
+  grid-template-columns: 1fr;
+}
+
+.builder-preview .cover-cardGrid__row--triple {
+  grid-template-columns: 1fr;
+}
+
+.builder-preview .cover-personCard h2.cover-personCard__label {
+  font-size: 1.45rem;
+}
+
+.builder-preview .trust-grid {
+  grid-template-columns: 1fr;
+}
+
+.builder-preview .overview-flow {
+  grid-template-columns: 1fr;
+}
+
+.builder-preview .overview-flow__intro,
+.builder-preview .workflow-panel {
+  grid-column: auto;
+}
+
+.builder-preview .workflow-panel .process-grid {
+  grid-template-columns: 1fr;
+}
+
+.builder-preview .workflow-panel .process-step:not(:last-child)::after {
+  display: none;
+}
+
+.builder-preview .pillar-list {
+  column-count: 1;
+}
+
+.builder-preview .spec-dl__row {
+  gap: 4px;
+  grid-template-columns: 1fr;
+}
+
+.builder-preview .proposal-page h2 {
+  font-size: 32px;
+}
+
+.builder-preview .measure-meta,
+.builder-preview .process-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.builder-preview .measure-heading,
+.builder-preview .section-grid,
+.builder-preview .measure-columns {
+  grid-template-columns: 1fr;
+}
+
+.builder-preview .net-badge {
+  text-align: left;
+}
