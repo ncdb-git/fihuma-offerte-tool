@@ -14,7 +14,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (window.localStorage.getItem(AUTH_STORAGE_KEY) === "true") {
-      router.replace("/create");
+      router.replace("/dashboard");
     }
   }, [router]);
 
@@ -24,7 +24,7 @@ export default function LoginPage() {
 
     if (email.trim().toLowerCase() === DEMO_LOGIN.email && password === DEMO_LOGIN.password) {
       window.localStorage.setItem(AUTH_STORAGE_KEY, "true");
-      router.replace("/create");
+      router.replace("/dashboard");
       return;
     }
 

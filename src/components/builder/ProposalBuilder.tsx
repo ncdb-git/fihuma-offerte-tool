@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronRight, FileDown, LogOut, UploadCloud } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, FileDown, LogOut, UploadCloud } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ConfiguratorSummary } from "@/components/builder/ConfiguratorSummary";
 import { MeerwerkPanel } from "@/components/builder/MeerwerkPanel";
@@ -105,8 +105,9 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
 
   const pickMeasureType = (type: MeasureType) => {
     const blank = createBlankMeasure(type);
+    const squareMeters = measure?.squareMeters ?? blank.squareMeters;
     const firstKey = MAIN_PRODUCTS[type][0]?.key ?? "pif35";
-    const withProduct = applyProductToMeasure(blank, firstKey);
+    const withProduct = applyProductToMeasure({ ...blank, squareMeters }, firstKey);
     const nextMods = defaultModules(type);
     setProductKey(firstKey);
     setModules(nextMods);
@@ -169,6 +170,23 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
     });
   }
 
+  async function saveConcept() {
+    const response = await fetch("/api/proposals/concepts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(proposal)
+    });
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || "Concept opslaan mislukt.");
+    }
+  }
+
+  async function backToDashboard() {
+    await saveConcept();
+    router.push("/dashboard");
+  }
+
   if (!measure) {
     return <p className="p-6 text-sm text-red-700">Geen maatregel geladen.</p>;
   }
@@ -189,6 +207,13 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
       </button>
       <aside className="flex h-screen flex-col border-r border-fihuma-line bg-white">
         <div className="shrink-0 border-b border-fihuma-line px-5 py-4">
+          <button
+            className="mb-3 flex items-center gap-2 text-xs font-black text-[#64736b] transition hover:text-fihuma-green"
+            onClick={backToDashboard}
+            type="button"
+          >
+            <ArrowLeft size={15} /> Terug naar dashboard
+          </button>
           <div className="flex items-center justify-between gap-2">
             <div>
               <p className="text-[10px] font-black uppercase tracking-wider text-fihuma-green">Configurator</p>
@@ -331,6 +356,24 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
           {step === 3 && (
             <div className="grid gap-3">
               <p className="text-xs font-bold uppercase tracking-wide text-[#64736b]">Maatregel</p>
+              <label className="grid gap-1 rounded-xl border border-fihuma-line bg-[#fbfcfa] p-3">
+                <span className="text-xs font-bold text-[#64736b]">Oppervlakte (m²)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  className="rounded-lg border border-fihuma-line px-3 py-2 text-sm"
+                  value={measure.squareMeters}
+                  onChange={(e) =>
+                    setProposal((p) => {
+                      const cur = p.measures[0];
+                      if (!cur) return p;
+                      return { ...p, measures: [syncFinancials({ ...cur, squareMeters: Number(e.target.value) || 0 }, modules, nip)] };
+                    })
+                  }
+                />
+                <span className="text-[11px] leading-relaxed text-[#64736b]">Vul eerst het aantal m² in en kies daarna de maatregel, bijvoorbeeld bodemisolatie.</span>
+              </label>
               <div className="grid grid-cols-2 gap-2">
                 {TYPE_CARDS.map((card) => (
                   <button
@@ -389,23 +432,6 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
           {step === 5 && (
             <div className="grid gap-4">
               <p className="text-xs font-bold uppercase tracking-wide text-[#64736b]">Investering</p>
-              <label className="grid gap-1">
-                <span className="text-xs font-bold text-[#64736b]">Oppervlakte (m²)</span>
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  className="rounded-lg border border-fihuma-line px-3 py-2 text-sm"
-                  value={measure.squareMeters}
-                  onChange={(e) =>
-                    setProposal((p) => {
-                      const cur = p.measures[0];
-                      if (!cur) return p;
-                      return { ...p, measures: [syncFinancials({ ...cur, squareMeters: Number(e.target.value) || 0 }, modules, nip)] };
-                    })
-                  }
-                />
-              </label>
               <label className="grid gap-1">
                 <span className="text-xs font-bold text-[#64736b]">Basis isolatie (€)</span>
                 <input

@@ -1655,6 +1655,21 @@ blockquote cite {
     -webkit-print-color-adjust: exact;
   }
 
+  .home-summary-card,
+  .product-inline-card,
+  .text-panel,
+  .trust-card,
+  .investment-card,
+  .investment-card--breakdown,
+  .investment-net-hero,
+  .agreement-card-group,
+  .agreement-card-group .text-panel,
+  .agreement-nextsteps,
+  .advisor-agreement-card {
+    background: #fff !important;
+    box-shadow: none !important;
+  }
+
   .proposal-page {
     break-after: page;
     break-before: auto;

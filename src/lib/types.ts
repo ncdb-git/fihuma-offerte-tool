@@ -1,6 +1,8 @@
 export type ProposalStatus =
   | "nog te maken"
   | "concept"
+  | "Concept vanuit Pipedrive"
+  | "Bijgewerkt vanuit Pipedrive"
   | "offerte gegenereerd"
   | "verstuurd"
   | "gearchiveerd";

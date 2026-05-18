@@ -3,8 +3,16 @@ import { Archive, Download, Search, Send, SlidersHorizontal } from "lucide-react
 import { AuthGate } from "@/components/auth/AuthGate";
 import { AppShell } from "@/components/dashboard/AppShell";
 import { demoProposals, money } from "@/lib/proposal-engine";
+import { listProposalConcepts } from "@/lib/proposal-store";
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const storedProposals = await listProposalConcepts().catch((error) => {
+    console.error("[dashboard] concepten ophalen mislukt", error);
+    return [];
+  });
+  const storedDealIds = new Set(storedProposals.map((proposal) => proposal.customer.pipedriveDealId));
+  const proposals = [...storedProposals, ...demoProposals.filter((proposal) => !storedDealIds.has(proposal.customer.pipedriveDealId))];
+
   return (
     <AuthGate>
       <AppShell>
@@ -14,7 +22,7 @@ export default function DashboardPage() {
             <h1 className="text-3xl font-black">Offertes</h1>
             <p className="mt-1 text-sm text-[#64736b]">Zoek, filter en beheer offertes vanuit een stabiele proposal engine.</p>
           </div>
-          <Link className="rounded-lg bg-fihuma-green px-4 py-3 text-sm font-bold text-white" href="/create?deal_id=1248">
+          <Link className="rounded-lg bg-fihuma-green px-4 py-3 text-sm font-bold text-white" href="/create">
             Nieuwe offerte
           </Link>
         </div>
@@ -47,8 +55,10 @@ export default function DashboardPage() {
             <span>Investering</span>
             <span>Acties</span>
           </div>
-          {demoProposals.map((proposal) => {
+          {proposals.map((proposal) => {
             const total = proposal.measures.reduce((sum, measure) => sum + measure.netInvestment, 0);
+            const isPipedriveConcept = proposal.customer.pipedriveDealId && proposal.customer.pipedriveDealId !== "demo" && !proposal.customer.pipedriveDealId.startsWith("manual-");
+            const href = isPipedriveConcept ? `/create?deal_id=${proposal.customer.pipedriveDealId}` : `/create?id=${proposal.id}`;
             return (
               <div className="grid grid-cols-[1.2fr_1fr_150px_150px_130px] items-center border-b border-fihuma-line px-5 py-4 last:border-0" key={proposal.id}>
                 <div>
@@ -61,7 +71,7 @@ export default function DashboardPage() {
                 <span className="w-fit rounded-full bg-fihuma-mint px-3 py-1 text-xs font-black text-fihuma-green">{proposal.status}</span>
                 <strong>{money(total)}</strong>
                 <div className="flex gap-2">
-                  <Link className="rounded-md border border-fihuma-line p-2" href={`/create?deal_id=${proposal.customer.pipedriveDealId}`} title="Openen">
+                  <Link className="rounded-md border border-fihuma-line p-2" href={href} title="Openen">
                     <Download size={17} />
                   </Link>
                   <button className="rounded-md border border-fihuma-line p-2" title="Versturen">
