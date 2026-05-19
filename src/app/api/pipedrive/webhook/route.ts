@@ -143,6 +143,8 @@ export async function POST(request: Request) {
       ...env
     });
   } catch (error) {
+    console.error("[pipedrive:webhook] ERROR", JSON.stringify(error, null, 2));
+
     logWebhookError("ERROR", error, {
       ...env,
       expectedStageId: expected

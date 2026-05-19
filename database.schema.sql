@@ -31,6 +31,9 @@ create index if not exists proposals_status_idx
 create index if not exists proposals_created_at_idx
   on proposals (created_at desc);
 
+create index if not exists proposals_updated_at_idx
+  on proposals (updated_at desc);
+
 create unique index if not exists proposals_pipedrive_deal_id_uidx
   on proposals (pipedrive_deal_id)
   where pipedrive_deal_id is not null and pipedrive_deal_id <> '';
