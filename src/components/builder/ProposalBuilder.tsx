@@ -28,8 +28,11 @@ import {
   SUBSIDY_CLAUSE_OPTIONS,
   type BuilderModules
 } from "@/lib/proposal-engine";
+import { isPipedriveDealId } from "@/lib/proposal-store-ids";
 import { Measure, MeasureType, Proposal, Salutation } from "@/lib/types";
 import { useRouter } from "next/navigation";
+
+type PipedriveUploadState = "idle" | "loading" | "success" | "error";
 
 const STEPS = [
   { id: 1, label: "Start" },
@@ -78,6 +81,8 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
   const m0 = initialProposal.measures[0];
   const [modules, setModules] = useState<BuilderModules>(() => defaultModules(m0?.type ?? "vloer"));
   const [productKey, setProductKey] = useState(() => (m0 ? getProductKeyForMeasure(m0) : "pif35"));
+  const [pipedriveUploadState, setPipedriveUploadState] = useState<PipedriveUploadState>("idle");
+  const [pipedriveUploadMessage, setPipedriveUploadMessage] = useState<string | null>(null);
 
   const measure = proposal.measures[0];
   const total = useMemo(() => proposal.measures.reduce((sum, m) => sum + m.netInvestment, 0), [proposal.measures]);
@@ -201,12 +206,52 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
   }
 
   async function uploadToPipedrive() {
-    await saveConcept("upload");
-    await fetch(`/api/proposals/${proposal.id}/upload`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(proposal)
-    });
+    const current = proposalRef.current;
+    const dealId = current.customer.pipedriveDealId?.trim() ?? "";
+
+    if (!isPipedriveDealId(dealId)) {
+      setPipedriveUploadState("error");
+      setPipedriveUploadMessage("Geen Pipedrive-deal gekoppeld. Open deze offerte via het dashboard vanuit een deal.");
+      console.error("[builder] pipedrive upload geblokkeerd: geen deal_id", {
+        proposalId: current.id,
+        pipedriveDealId: current.customer.pipedriveDealId
+      });
+      return;
+    }
+
+    setPipedriveUploadState("loading");
+    setPipedriveUploadMessage(null);
+
+    try {
+      await saveConcept("upload");
+
+      const response = await fetch("/api/pipedrive/upload-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(current)
+      });
+
+      const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; message?: string };
+      if (!response.ok || payload.ok === false) {
+        const errorText = payload.error ?? payload.message ?? `Upload mislukt (HTTP ${response.status})`;
+        console.error("[builder] pipedrive upload mislukt", { status: response.status, payload });
+        throw new Error(errorText);
+      }
+
+      setProposal((prev) => ({ ...prev, status: "Geüpload naar Pipedrive" }));
+      setPipedriveUploadState("success");
+      setPipedriveUploadMessage("PDF is toegevoegd aan Pipedrive");
+
+      window.setTimeout(() => {
+        setPipedriveUploadState((state) => (state === "success" ? "idle" : state));
+        setPipedriveUploadMessage(null);
+      }, 5000);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Upload naar Pipedrive mislukt";
+      setPipedriveUploadState("error");
+      setPipedriveUploadMessage(message);
+      console.error("[builder] pipedrive upload fout", error);
+    }
   }
 
   async function backToDashboard() {
@@ -268,19 +313,44 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
           <div className="mt-3 flex gap-2">
             <button
               className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-fihuma-green px-3 py-2.5 text-xs font-bold text-white"
-              onClick={downloadPdf}
+              onClick={() => void downloadPdf()}
               type="button"
             >
               <FileDown size={16} /> PDF
             </button>
             <button
-              className="flex items-center justify-center gap-2 rounded-lg border border-fihuma-line px-3 py-2.5 text-xs font-bold"
-              onClick={uploadToPipedrive}
+              className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-xs font-bold transition ${
+                pipedriveUploadState === "success"
+                  ? "border-fihuma-green bg-fihuma-mint text-fihuma-green"
+                  : pipedriveUploadState === "loading"
+                    ? "cursor-wait border-fihuma-line text-[#64736b]"
+                    : "border-fihuma-line hover:border-fihuma-green hover:text-fihuma-green"
+              }`}
+              disabled={pipedriveUploadState === "loading"}
+              onClick={() => void uploadToPipedrive()}
               type="button"
             >
-              <UploadCloud size={16} /> Pipedrive
+              {pipedriveUploadState === "loading" ? (
+                <>Bezig…</>
+              ) : pipedriveUploadState === "success" ? (
+                <>
+                  <Check size={16} /> Geüpload
+                </>
+              ) : (
+                <>
+                  <UploadCloud size={16} /> Pipedrive
+                </>
+              )}
             </button>
           </div>
+          {pipedriveUploadMessage ? (
+            <p
+              className={`mt-2 text-xs font-medium ${pipedriveUploadState === "error" ? "text-red-700" : "text-fihuma-green"}`}
+              role="status"
+            >
+              {pipedriveUploadMessage}
+            </p>
+          ) : null}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">

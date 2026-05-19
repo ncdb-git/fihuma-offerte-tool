@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { formatProposalPdfFilename } from "@/lib/proposal-engine";
 import { renderProposalPdf } from "@/lib/pdf-renderer";
 import { addDealNote, markDealOfferReady, uploadProposalPdf } from "@/lib/pipedrive";
+import { isPipedriveDealId } from "@/lib/proposal-store-ids";
 import { upsertProposalConcept } from "@/lib/proposal-store";
 import { Proposal } from "@/lib/types";
 
@@ -10,8 +11,15 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   try {
     const proposal = (await request.json()) as Proposal;
-    const dealId = proposal.customer.pipedriveDealId;
+    const dealId = proposal.customer.pipedriveDealId?.trim() ?? "";
     console.info("[pipedrive:upload-pdf] start", { dealId, proposalId: proposal.id });
+
+    if (!isPipedriveDealId(dealId)) {
+      return NextResponse.json(
+        { ok: false, error: "Geen geldige Pipedrive deal_id. Open deze offerte via een gekoppelde deal." },
+        { status: 400 }
+      );
+    }
 
     if (!process.env.PIPEDRIVE_API_TOKEN) {
       console.info("[pipedrive:upload-pdf] demo mode: token ontbreekt", { dealId });
