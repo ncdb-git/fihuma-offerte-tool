@@ -1,4 +1,9 @@
 export type ProposalStatus =
+  | "Nieuw vanuit Pipedrive"
+  | "In bewerking"
+  | "Offerte gegenereerd"
+  | "Geüpload naar Pipedrive"
+  | "Gearchiveerd"
   | "nog te maken"
   | "concept"
   | "Concept vanuit Pipedrive"

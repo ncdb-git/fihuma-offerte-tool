@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     const dealId = payloadDealId(payload);
     const stageId = payloadStageId(payload);
 
-    console.info("[pipedrive:webhook] ontvangen", { dealId, stageId });
+    console.info("[pipedrive:webhook] received deal_id", { dealId, stageId });
 
     if (!isDealUpdate(payload) || !dealId) {
       console.info("[pipedrive:webhook] genegeerd: geen deal update");
@@ -43,9 +43,13 @@ export async function POST(request: Request) {
 
     const bundle = await fetchPipedriveDealBundle(dealId);
     const proposal = mapPipedriveBundleToProposal(dealId, bundle);
-    const result = await upsertProposalConcept(proposal);
+    const result = await upsertProposalConcept(proposal, "webhook");
 
-    console.info(result.created ? "[pipedrive:webhook] concept aangemaakt" : "[pipedrive:webhook] concept bijgewerkt", { dealId, proposalId: result.proposal.id });
+    console.info(result.created ? "[pipedrive:webhook] dashboard item created" : "[pipedrive:webhook] dashboard item updated", {
+      dealId,
+      proposalId: result.proposal.id,
+      status: result.proposal.status
+    });
 
     return NextResponse.json({
       ok: true,

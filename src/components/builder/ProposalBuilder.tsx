@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowLeft, Check, ChevronRight, FileDown, LogOut, UploadCloud } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConfiguratorSummary } from "@/components/builder/ConfiguratorSummary";
 import { MeerwerkPanel } from "@/components/builder/MeerwerkPanel";
 import { ProposalDocument } from "@/components/proposal/ProposalDocument";
@@ -70,7 +70,11 @@ function rebuildMeasure(measure: Measure, parts: { modules: BuilderModules; nip:
 export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal }) {
   const router = useRouter();
   const [proposal, setProposal] = useState(initialProposal);
-  const [step, setStep] = useState(1);
+  const [step, setStepState] = useState(1);
+  const skipAutosaveRef = useRef(true);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const proposalRef = useRef(proposal);
+  proposalRef.current = proposal;
   const m0 = initialProposal.measures[0];
   const [modules, setModules] = useState<BuilderModules>(() => defaultModules(m0?.type ?? "vloer"));
   const [productKey, setProductKey] = useState(() => (m0 ? getProductKeyForMeasure(m0) : "pif35"));
@@ -138,7 +142,41 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
     });
   };
 
+  async function saveConcept(source: "advisor" | "pdf" | "upload" = "advisor") {
+    const response = await fetch("/api/proposals/concepts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...proposalRef.current, source })
+    });
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || "Concept opslaan mislukt.");
+    }
+  }
+
+  function setStep(nextStep: number) {
+    setStepState(nextStep);
+    void saveConcept("advisor");
+  }
+
+  useEffect(() => {
+    if (skipAutosaveRef.current) {
+      skipAutosaveRef.current = false;
+      return;
+    }
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveConcept("advisor").catch((error) => console.error("[builder] autosave mislukt", error));
+    }, 900);
+
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [proposal]);
+
   async function downloadPdf() {
+    await saveConcept("pdf");
     const response = await fetch(`/api/proposals/${proposal.id}/pdf`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -163,6 +201,7 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
   }
 
   async function uploadToPipedrive() {
+    await saveConcept("upload");
     await fetch(`/api/proposals/${proposal.id}/upload`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -170,20 +209,8 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
     });
   }
 
-  async function saveConcept() {
-    const response = await fetch("/api/proposals/concepts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(proposal)
-    });
-    if (!response.ok) {
-      const message = await response.text();
-      throw new Error(message || "Concept opslaan mislukt.");
-    }
-  }
-
   async function backToDashboard() {
-    await saveConcept();
+    await saveConcept("advisor");
     router.push("/dashboard");
   }
 

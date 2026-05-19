@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { formatProposalPdfFilename } from "@/lib/proposal-engine";
 import { renderProposalPdf } from "@/lib/pdf-renderer";
 import { addDealNote, markDealOfferReady, uploadProposalPdf } from "@/lib/pipedrive";
+import { upsertProposalConcept } from "@/lib/proposal-store";
 import { Proposal } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -22,6 +23,8 @@ export async function POST(request: Request) {
     const fileResult = await uploadProposalPdf(proposal, new Blob([new Uint8Array(pdf)], { type: "application/pdf" }), filename);
     await addDealNote(dealId, "Definitieve offerte gegenereerd en toegevoegd.");
     const labelResult = await markDealOfferReady(dealId);
+
+    await upsertProposalConcept({ ...proposal, status: "Geüpload naar Pipedrive" }, "upload");
 
     console.info("[pipedrive:upload-pdf] gelukt", { dealId, filename });
     return NextResponse.json({ ok: true, fileResult, labelResult });

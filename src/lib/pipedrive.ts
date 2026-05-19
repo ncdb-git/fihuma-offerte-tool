@@ -123,7 +123,7 @@ export function mapPipedriveBundleToProposal(dealId: string, bundle: Awaited<Ret
     ...proposal,
     id: `FIH-${dealId}`,
     quoteNumber: `FIH-${dealId}`,
-    status: "Concept vanuit Pipedrive",
+    status: "Nieuw vanuit Pipedrive",
     advisor,
     customer: {
       salutation: "familie",
