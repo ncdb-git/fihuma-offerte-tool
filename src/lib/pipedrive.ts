@@ -89,10 +89,15 @@ export async function fetchPipedriveDealBundle(dealId: string) {
   const deal = await pipedriveGet<PipedriveDeal>(`/deals/${dealId}`);
   const personId = idFromReference(deal.person_id);
   const organizationId = idFromReference(deal.org_id);
-  const [person, organization] = await Promise.all([
-    personId ? pipedriveGet<PipedrivePerson>(`/persons/${personId}`).catch(() => (deal.person_id as PipedrivePerson) ?? {}) : Promise.resolve((deal.person_id as PipedrivePerson) ?? {}),
-    organizationId ? pipedriveGet<PipedriveOrganization>(`/organizations/${organizationId}`).catch(() => (deal.org_id as PipedriveOrganization) ?? {}) : Promise.resolve((deal.org_id as PipedriveOrganization) ?? {})
+
+  const [personFromApi, personFromDeal, organization] = await Promise.all([
+    personId ? pipedriveGet<PipedrivePerson>(`/persons/${personId}`).catch(() => ({})) : Promise.resolve({}),
+    pipedriveGet<PipedrivePerson>(`/deals/${dealId}/person`).catch(() => ({})),
+    organizationId ? pipedriveGet<PipedriveOrganization>(`/organizations/${organizationId}`).catch(() => ({})) : Promise.resolve({})
   ]);
+
+  const person = { ...(deal.person_id as PipedrivePerson), ...personFromDeal, ...personFromApi };
+
   return { deal, person, organization };
 }
 
@@ -175,7 +180,7 @@ export async function fetchPipedriveCustomer(dealId: string): Promise<Customer> 
 
   return {
     salutation: "familie",
-    name: textValue(getPath(source, fields.klantNaam)) || textValue(organization.name) || textValue(deal.title) || "Onbekende klant",
+    name: textValue(getPath(source, fields.klantNaam)) || textValue(getPath(source, "organization.name")) || textValue(deal.title) || "Onbekende klant",
     address: addressFields.address,
     postalCode: addressFields.postalCode,
     city: addressFields.city,

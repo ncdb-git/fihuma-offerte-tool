@@ -99,6 +99,20 @@ function cityFromFieldKey(record: PipedriveRecord, fieldKey: string | null | und
   return textValue(raw);
 }
 
+function pickFromRecords(
+  records: Array<{ label: string; data: PipedriveRecord }>,
+  fieldKey: string | null | undefined,
+  reader: (record: PipedriveRecord, key: string | null | undefined) => string
+) {
+  for (const { label, data } of records) {
+    const value = reader(data, fieldKey);
+    if (value) {
+      return { value, source: `${label}_custom_field` };
+    }
+  }
+  return { value: "", source: "none" };
+}
+
 function streetFromRecord(record: PipedriveRecord, prefix: "postal_address" | "address") {
   const route = textValue(record[`${prefix}_route`]);
   const number = textValue(record[`${prefix}_street_number`]);
@@ -162,12 +176,15 @@ export async function resolveCustomerAddressFromBundle(bundle: {
   const { deal, person, organization } = bundle;
   const fieldKeys = await discoverAddressFieldKeys();
 
-  const fromDealAdres = addressFromFieldKey(deal, fieldKeys.adres);
-  const fromPersonAdres = addressFromFieldKey(person, fieldKeys.adres);
-  const fromDealPostcode = postcodeFromFieldKey(deal, fieldKeys.postcode);
-  const fromPersonPostcode = postcodeFromFieldKey(person, fieldKeys.postcode);
-  const fromDealPlaats = cityFromFieldKey(deal, fieldKeys.woonplaats);
-  const fromPersonPlaats = cityFromFieldKey(person, fieldKeys.woonplaats);
+  const records = [
+    { label: "person", data: person },
+    { label: "deal", data: deal },
+    { label: "organization", data: organization }
+  ];
+
+  const fromPersonAdres = pickFromRecords(records, fieldKeys.adres, addressFromFieldKey);
+  const fromPersonPostcode = pickFromRecords(records, fieldKeys.postcode, postcodeFromFieldKey);
+  const fromPersonPlaats = pickFromRecords(records, fieldKeys.woonplaats, cityFromFieldKey);
 
   const scannedDeal = scanForAddressObjects(deal);
   const scannedPerson = scanForAddressObjects(person);
@@ -180,68 +197,28 @@ export async function resolveCustomerAddressFromBundle(bundle: {
   const orgPostcode = textValue(organization.address_postal_code);
   const orgCity = textValue(organization.address_locality);
 
-  const address = firstNonEmpty(fromDealAdres, fromPersonAdres, scannedDeal[0]?.address ?? "", scannedPerson[0]?.address ?? "", personStreet, orgStreet);
+  const address = firstNonEmpty(fromPersonAdres.value, scannedPerson[0]?.address ?? "", scannedDeal[0]?.address ?? "", personStreet, orgStreet);
   const postalCode = firstNonEmpty(
-    fromDealPostcode,
-    fromPersonPostcode,
-    scannedDeal[0]?.postalCode ?? "",
+    fromPersonPostcode.value,
     scannedPerson[0]?.postalCode ?? "",
+    scannedDeal[0]?.postalCode ?? "",
     personPostcode,
     orgPostcode
   );
-  const city = firstNonEmpty(fromDealPlaats, fromPersonPlaats, scannedDeal[0]?.city ?? "", scannedPerson[0]?.city ?? "", personCity, orgCity);
+  const city = firstNonEmpty(fromPersonPlaats.value, scannedPerson[0]?.city ?? "", scannedDeal[0]?.city ?? "", personCity, orgCity);
 
   const sources = {
-    address: fromDealAdres
-      ? "deal_custom_adres"
-      : fromPersonAdres
-        ? "person_custom_adres"
-        : scannedDeal[0]?.address
-          ? "deal_scan_address_object"
-          : scannedPerson[0]?.address
-            ? "person_scan_address_object"
-            : personStreet
-              ? "person_postal_address"
-              : orgStreet
-                ? "organization_address"
-                : "none",
-    postalCode: fromDealPostcode
-      ? "deal_custom_postcode"
-      : fromPersonPostcode
-        ? "person_custom_postcode"
-        : scannedDeal[0]?.postalCode
-          ? "deal_scan_address_object"
-          : personPostcode
-            ? "person_postal_code"
-            : orgPostcode
-              ? "organization_postal_code"
-              : "none",
-    city: fromDealPlaats
-      ? "deal_custom_woonplaats"
-      : fromPersonPlaats
-        ? "person_custom_woonplaats"
-        : scannedDeal[0]?.city
-          ? "deal_scan_address_object"
-          : personCity
-            ? "person_locality"
-            : orgCity
-              ? "organization_locality"
-              : "none"
+    address: fromPersonAdres.source,
+    postalCode: fromPersonPostcode.source,
+    city: fromPersonPlaats.source
   };
 
   const dealFieldHits: Record<string, unknown> = {};
   const personFieldHits: Record<string, unknown> = {};
-  if (fieldKeys.adres) {
-    dealFieldHits[fieldKeys.adres] = deal[fieldKeys.adres];
-    personFieldHits[fieldKeys.adres] = person[fieldKeys.adres];
-  }
-  if (fieldKeys.postcode) {
-    dealFieldHits[fieldKeys.postcode] = deal[fieldKeys.postcode];
-    personFieldHits[fieldKeys.postcode] = person[fieldKeys.postcode];
-  }
-  if (fieldKeys.woonplaats) {
-    dealFieldHits[fieldKeys.woonplaats] = deal[fieldKeys.woonplaats];
-    personFieldHits[fieldKeys.woonplaats] = person[fieldKeys.woonplaats];
+  for (const key of [fieldKeys.adres, fieldKeys.postcode, fieldKeys.woonplaats]) {
+    if (!key) continue;
+    dealFieldHits[key] = deal[key] ?? null;
+    personFieldHits[key] = person[key] ?? null;
   }
 
   return {

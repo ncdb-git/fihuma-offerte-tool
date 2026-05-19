@@ -9,6 +9,21 @@ type PipedriveFieldDef = {
 let dealFieldsCache: PipedriveFieldDef[] | null = null;
 let personFieldsCache: PipedriveFieldDef[] | null = null;
 
+const STANDARD_FIELD_KEYS = new Set([
+  "id",
+  "title",
+  "stage_id",
+  "pipeline_id",
+  "person_id",
+  "org_id",
+  "user_id",
+  "creator_user_id",
+  "value",
+  "currency",
+  "status",
+  "probability"
+]);
+
 async function fetchFieldDefs(path: "/dealFields" | "/personFields") {
   const response = await fetch(`${pipedriveBaseUrl}${path}?api_token=${pipedriveToken()}`, { cache: "no-store" });
   if (!response.ok) throw new Error(`Pipedrive ${path} mislukt: ${response.status}`);
@@ -16,9 +31,16 @@ async function fetchFieldDefs(path: "/dealFields" | "/personFields") {
   return (payload.data ?? []) as PipedriveFieldDef[];
 }
 
-function matchField(fields: PipedriveFieldDef[], patterns: RegExp[]) {
+function isCustomFieldKey(key: string | undefined) {
+  if (!key) return false;
+  if (STANDARD_FIELD_KEYS.has(key)) return false;
+  return /^[a-f0-9]{40}$/i.test(key);
+}
+
+function matchCustomField(fields: PipedriveFieldDef[], patterns: RegExp[]) {
   const hit = fields.find((field) => {
-    const name = String(field.name ?? "").toLowerCase();
+    if (!isCustomFieldKey(field.key)) return false;
+    const name = String(field.name ?? "").trim().toLowerCase();
     return patterns.some((pattern) => pattern.test(name));
   });
   return hit?.key?.trim() ?? null;
@@ -31,7 +53,7 @@ export type DiscoveredFieldKeys = {
   sources: Record<string, string>;
 };
 
-/** Vindt custom field API keys op label (adres/postcode/plaats) + env override. */
+/** Vindt custom field API keys — adresvelden staan bij Fihuma op Persoon. */
 export async function discoverAddressFieldKeys(): Promise<DiscoveredFieldKeys> {
   const sources: Record<string, string> = {};
 
@@ -47,25 +69,27 @@ export async function discoverAddressFieldKeys(): Promise<DiscoveredFieldKeys> {
     if (!dealFieldsCache) dealFieldsCache = await fetchFieldDefs("/dealFields");
     if (!personFieldsCache) personFieldsCache = await fetchFieldDefs("/personFields");
 
-    const dealAdres =
-      matchField(dealFieldsCache, [/straat/, /huisnummer/, /\badres\b/, /address/]) ??
-      matchField(personFieldsCache, [/straat/, /huisnummer/, /\badres\b/, /address/]);
-    const dealPostcode =
-      matchField(dealFieldsCache, [/postcode/, /postal/]) ?? matchField(personFieldsCache, [/postcode/, /postal/]);
-    const dealPlaats =
-      matchField(dealFieldsCache, [/woonplaats/, /\bplaats\b/, /stad/, /city/, /locality/]) ??
-      matchField(personFieldsCache, [/woonplaats/, /\bplaats\b/, /stad/, /city/, /locality/]);
+    // Fihuma: straat/postcode/plaats zijn persoon-velden (zie personFields in debug)
+    const personAdres = matchCustomField(personFieldsCache, [/straat/, /huisnummer/, /\badres\b/, /address/]);
+    const personPostcode = matchCustomField(personFieldsCache, [/^postcode$/, /postal/]);
+    const personPlaats = matchCustomField(personFieldsCache, [/^plaats$/, /^woonplaats$/, /^stad$/, /^city$/]);
 
-    if (!envAdres && dealAdres) sources.adres = "discovered";
-    if (!envPostcode && dealPostcode) sources.postcode = "discovered";
-    if (!envPlaats && dealPlaats) sources.woonplaats = "discovered";
+    const dealAdres = matchCustomField(dealFieldsCache, [/straat/, /huisnummer/, /\badres\b/, /address/]);
+    const dealPostcode = matchCustomField(dealFieldsCache, [/^postcode$/, /postal/]);
+    const dealPlaats = matchCustomField(dealFieldsCache, [/^plaats$/, /^woonplaats$/, /^stad$/, /^city$/]);
 
-    return {
-      adres: envAdres ?? dealAdres,
-      postcode: envPostcode ?? dealPostcode,
-      woonplaats: envPlaats ?? dealPlaats,
-      sources
-    };
+    const adres = envAdres ?? personAdres ?? dealAdres;
+    const postcode = envPostcode ?? personPostcode ?? dealPostcode;
+    const woonplaats = envPlaats ?? personPlaats ?? dealPlaats;
+
+    if (!envAdres && personAdres) sources.adres = "discovered_person";
+    else if (!envAdres && dealAdres) sources.adres = "discovered_deal";
+    if (!envPostcode && personPostcode) sources.postcode = "discovered_person";
+    else if (!envPostcode && dealPostcode) sources.postcode = "discovered_deal";
+    if (!envPlaats && personPlaats) sources.woonplaats = "discovered_person";
+    else if (!envPlaats && dealPlaats) sources.woonplaats = "discovered_deal";
+
+    return { adres, postcode, woonplaats, sources };
   } catch (error) {
     console.warn("[pipedrive] field discovery mislukt, alleen env keys", error);
     return {
@@ -83,7 +107,7 @@ export async function listAddressRelatedFields() {
 
   const filter = (fields: PipedriveFieldDef[]) =>
     fields
-      .filter((f) => /adres|straat|postcode|plaats|woon|address|postal|city/i.test(String(f.name ?? "")))
+      .filter((f) => isCustomFieldKey(f.key) && /adres|straat|postcode|plaats|woon|address|postal|city/i.test(String(f.name ?? "")))
       .map((f) => ({ key: f.key, name: f.name, field_type: f.field_type }));
 
   return {
