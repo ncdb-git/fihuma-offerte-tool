@@ -8,23 +8,35 @@ import {
   isolationLabelForType,
   MAIN_PRODUCTS
 } from "@/lib/proposal-engine";
+import { resolveCustomerAddressFromBundle } from "@/lib/pipedrive-address";
 import { Customer, IsdeSubsidyStatus, MeasureType, Proposal } from "@/lib/types";
 
 export const pipedriveBaseUrl = process.env.PIPEDRIVE_COMPANY_DOMAIN
   ? `https://${process.env.PIPEDRIVE_COMPANY_DOMAIN}.pipedrive.com/api/v1`
   : "https://api.pipedrive.com/v1";
 
-export const pipedriveFieldMap = {
-  klantNaam: "person.name",
-  email: "person.email[0].value",
-  telefoon: "person.phone[0].value",
-  adres: "deal.address",
-  postcode: "deal.address_postal_code",
-  woonplaats: "deal.address_locality",
-  maatregel: "deal.custom_field_maatregel",
-  oppervlakte: "deal.custom_field_oppervlakte",
-  subsidieOptie: "deal.custom_field_subsidie_optie"
-} as const;
+/** Centrale field mapping — custom field hashes via env (zie .env.example). */
+export function getPipedriveFieldMap() {
+  const dealField = (envKey: string, fallback: string) => {
+    const hash = process.env[envKey]?.trim();
+    return hash ? `deal.${hash}` : fallback;
+  };
+
+  return {
+    klantNaam: "person.name",
+    email: "person.email[0].value",
+    telefoon: "person.phone[0].value",
+    adres: dealField("PIPEDRIVE_FIELD_ADRES", "person.postal_address_route"),
+    postcode: dealField("PIPEDRIVE_FIELD_POSTCODE", "person.postal_address_postal_code"),
+    woonplaats: dealField("PIPEDRIVE_FIELD_WOONPLAATS", "person.postal_address_locality"),
+    maatregel: dealField("PIPEDRIVE_FIELD_MAATREGEL", "deal.custom_field_maatregel"),
+    oppervlakte: dealField("PIPEDRIVE_FIELD_OPPERVLAKTE", "deal.custom_field_oppervlakte"),
+    subsidieOptie: dealField("PIPEDRIVE_FIELD_SUBSIDIE", "deal.custom_field_subsidie_optie")
+  } as const;
+}
+
+/** @deprecated Gebruik getPipedriveFieldMap() — adres/postcode/plaats via resolveCustomerAddressFromBundle. */
+export const pipedriveFieldMap = getPipedriveFieldMap();
 
 function token() {
   if (!process.env.PIPEDRIVE_API_TOKEN) {
@@ -109,9 +121,20 @@ export function isTargetOfferStage(stageId: unknown) {
 
 export function mapPipedriveBundleToProposal(dealId: string, bundle: Awaited<ReturnType<typeof fetchPipedriveDealBundle>>): Proposal {
   const source = { deal: bundle.deal, person: bundle.person, organization: bundle.organization };
-  const measureType = measureTypeFromPipedrive(textValue(getPath(source, pipedriveFieldMap.maatregel)));
-  const squareMeters = Number(textValue(getPath(source, pipedriveFieldMap.oppervlakte))) || createBlankMeasure(measureType).squareMeters;
-  const subsidyStatus = subsidyStatusFromPipedrive(textValue(getPath(source, pipedriveFieldMap.subsidieOptie)));
+  const fields = getPipedriveFieldMap();
+  const addressFields = resolveCustomerAddressFromBundle(bundle);
+
+  console.info("[pipedrive] customer address resolved", {
+    dealId,
+    address: addressFields.address,
+    postalCode: addressFields.postalCode,
+    city: addressFields.city,
+    sources: addressFields.sources
+  });
+
+  const measureType = measureTypeFromPipedrive(textValue(getPath(source, fields.maatregel)));
+  const squareMeters = Number(textValue(getPath(source, fields.oppervlakte))) || createBlankMeasure(measureType).squareMeters;
+  const subsidyStatus = subsidyStatusFromPipedrive(textValue(getPath(source, fields.subsidieOptie)));
   const firstProduct = MAIN_PRODUCTS[measureType][0]?.key ?? "pif35";
   const baseMeasure = createBlankMeasure(measureType);
   const measure = applyAutomaticIsdeSubsidy(applyProductToMeasure({ ...baseMeasure, squareMeters, subsidyStatus }, firstProduct));
@@ -127,12 +150,12 @@ export function mapPipedriveBundleToProposal(dealId: string, bundle: Awaited<Ret
     advisor,
     customer: {
       salutation: "familie",
-      name: textValue(getPath(source, pipedriveFieldMap.klantNaam)) || textValue(getPath(source, "organization.name")) || textValue(getPath(source, "deal.title")) || "Onbekende klant",
-      address: textValue(getPath(source, pipedriveFieldMap.adres)) || textValue(getPath(source, "organization.address")),
-      postalCode: textValue(getPath(source, pipedriveFieldMap.postcode)) || textValue(getPath(source, "organization.address_postal_code")),
-      city: textValue(getPath(source, pipedriveFieldMap.woonplaats)) || textValue(getPath(source, "organization.address_locality")),
-      email: textValue(getPath(source, pipedriveFieldMap.email)),
-      phone: textValue(getPath(source, pipedriveFieldMap.telefoon)),
+      name: textValue(getPath(source, fields.klantNaam)) || textValue(getPath(source, "organization.name")) || textValue(getPath(source, "deal.title")) || "Onbekende klant",
+      address: addressFields.address,
+      postalCode: addressFields.postalCode,
+      city: addressFields.city,
+      email: textValue(getPath(source, fields.email)),
+      phone: textValue(getPath(source, fields.telefoon)),
       pipedriveDealId: dealId,
       pipedriveDealLink: dealUrl(dealId)
     },
@@ -146,16 +169,20 @@ export function mapPipedriveBundleToProposal(dealId: string, bundle: Awaited<Ret
 }
 
 export async function fetchPipedriveCustomer(dealId: string): Promise<Customer> {
-  const { deal, person, organization } = await fetchPipedriveDealBundle(dealId);
+  const bundle = await fetchPipedriveDealBundle(dealId);
+  const { deal, person, organization } = bundle;
+  const fields = getPipedriveFieldMap();
+  const source = { deal, person, organization };
+  const addressFields = resolveCustomerAddressFromBundle(bundle);
 
   return {
     salutation: "familie",
-    name: textValue(person.name) || textValue(organization.name) || textValue(deal.title) || "Onbekende klant",
-    address: textValue(organization.address),
-    postalCode: textValue(organization.address_postal_code),
-    city: textValue(organization.address_locality),
-    email: textValue(getPath({ person }, "person.email[0].value")),
-    phone: textValue(getPath({ person }, "person.phone[0].value")),
+    name: textValue(getPath(source, fields.klantNaam)) || textValue(organization.name) || textValue(deal.title) || "Onbekende klant",
+    address: addressFields.address,
+    postalCode: addressFields.postalCode,
+    city: addressFields.city,
+    email: textValue(getPath(source, fields.email)),
+    phone: textValue(getPath(source, fields.telefoon)),
     pipedriveDealId: dealId,
     pipedriveDealLink: dealUrl(dealId)
   };

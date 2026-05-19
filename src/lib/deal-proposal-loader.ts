@@ -1,12 +1,42 @@
 import { fetchPipedriveDealBundle, mapPipedriveBundleToProposal } from "@/lib/pipedrive";
+import { resolveCustomerAddressFromBundle } from "@/lib/pipedrive-address";
 import { createGuidedProposal } from "@/lib/proposal-engine";
 import { getProposalConceptByDealId, pipedriveRecordId, upsertProposalConcept } from "@/lib/proposal-store";
 import { Proposal } from "@/lib/types";
+
+async function backfillAddressFromPipedrive(proposal: Proposal, dealId: string) {
+  const missing = !proposal.customer.address || !proposal.customer.postalCode || !proposal.customer.city;
+  if (!missing || !process.env.PIPEDRIVE_API_TOKEN) return { proposal, updated: false as const };
+
+  const bundle = await fetchPipedriveDealBundle(dealId);
+  const address = resolveCustomerAddressFromBundle(bundle);
+  if (!address.address && !address.postalCode && !address.city) return { proposal, updated: false as const };
+
+  return {
+    updated: true as const,
+    sources: address.sources,
+    proposal: {
+      ...proposal,
+      customer: {
+        ...proposal.customer,
+        address: proposal.customer.address || address.address,
+        postalCode: proposal.customer.postalCode || address.postalCode,
+        city: proposal.customer.city || address.city
+      }
+    }
+  };
+}
 
 /** Laadt een bestaand concept of maakt er één aan — zonder bevestigingsscherm. */
 export async function ensureProposalForDeal(dealId: string): Promise<Proposal> {
   const existing = await getProposalConceptByDealId(dealId);
   if (existing) {
+    const backfill = await backfillAddressFromPipedrive(existing, dealId);
+    if (backfill.updated) {
+      const result = await upsertProposalConcept(backfill.proposal, "advisor");
+      console.info("[create] adres aangevuld vanuit Pipedrive", { dealId, sources: backfill.sources });
+      return result.proposal;
+    }
     console.info("[create] bestaand proposal geladen", { dealId, proposalId: existing.id });
     return existing;
   }
