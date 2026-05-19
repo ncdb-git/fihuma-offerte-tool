@@ -1,0 +1,12 @@
+{
+  "functions": {
+    "src/app/api/pipedrive/upload-pdf/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "src/app/api/proposals/[id]/pdf/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  }
+}

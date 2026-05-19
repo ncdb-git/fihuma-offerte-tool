@@ -2,7 +2,7 @@
 const nextConfig = {
   output: "standalone",
   experimental: {
-    serverComponentsExternalPackages: ["playwright"]
+    serverComponentsExternalPackages: ["@sparticuz/chromium", "puppeteer-core"]
   }
 };
 

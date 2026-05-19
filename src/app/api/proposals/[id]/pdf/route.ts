@@ -4,6 +4,7 @@ import { renderProposalPdf } from "@/lib/pdf-renderer";
 import { Proposal } from "@/lib/types";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 function pdfResponse(pdf: Buffer, filename: string) {
   return new NextResponse(new Uint8Array(pdf), {

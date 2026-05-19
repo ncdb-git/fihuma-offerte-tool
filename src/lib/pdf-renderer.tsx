@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { ProposalDocument } from "@/components/proposal/ProposalDocument";
+import { launchPdfBrowser } from "@/lib/pdf-browser";
 import { Proposal } from "@/lib/types";
 
 function mimeTypeForAsset(filePath: string) {
@@ -33,8 +33,7 @@ async function inlinePublicImages(markup: string) {
   return markup.replace(srcPattern, (_, srcPath: string) => `src="${replacements.get(srcPath) ?? `/${srcPath}`}"`);
 }
 
-export async function renderProposalPdf(proposal: Proposal) {
-  const { chromium } = await import("playwright");
+export async function renderProposalPdf(proposal: Proposal): Promise<Buffer> {
   const { renderToStaticMarkup } = await import("react-dom/server");
   const css = await fs.readFile(path.join(process.cwd(), "src/styles/proposal.css"), "utf8");
   const markup = await inlinePublicImages(renderToStaticMarkup(<ProposalDocument proposal={proposal} />));
@@ -53,36 +52,39 @@ export async function renderProposalPdf(proposal: Proposal) {
       <body>${markup}</body>
     </html>`;
 
-  const localChromium = path.join(
-    process.cwd(),
-    ".playwright-browsers/chromium-1223/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
-  );
-  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ?? (existsSync(localChromium) ? localChromium : undefined);
-  const browser = await chromium.launch({ executablePath, headless: true });
+  const browser = await launchPdfBrowser();
   try {
-    const page = await browser.newPage({ viewport: { width: 794, height: 1122 }, deviceScaleFactor: 1 });
+    const page = await browser.newPage();
+    await page.setViewport({ width: 794, height: 1122, deviceScaleFactor: 1 });
     await page.setContent(html, { waitUntil: "load" });
-    await page.emulateMedia({ media: "print" });
+    await page.emulateMediaType("print");
     await page.evaluate(async () => {
       await document.fonts.ready;
       await Promise.all(
         Array.from(document.images).map((img) => {
           if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-          if (img.complete && img.naturalWidth === 0) return Promise.reject(new Error(`Kon afbeelding niet laden: ${img.currentSrc || img.src}`));
+          if (img.complete && img.naturalWidth === 0) {
+            return Promise.reject(new Error(`Kon afbeelding niet laden: ${img.currentSrc || img.src}`));
+          }
           return new Promise<void>((resolve, reject) => {
             img.addEventListener("load", () => resolve(), { once: true });
-            img.addEventListener("error", () => reject(new Error(`Kon afbeelding niet laden: ${img.currentSrc || img.src}`)), { once: true });
+            img.addEventListener("error", () => reject(new Error(`Kon afbeelding niet laden: ${img.currentSrc || img.src}`)), {
+              once: true
+            });
           });
         })
       );
       await Promise.all(Array.from(document.images).map((img) => img.decode().catch(() => undefined)));
     });
-    return await page.pdf({
+
+    const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
       preferCSSPageSize: true,
       margin: { top: "0", right: "0", bottom: "0", left: "0" }
     });
+
+    return Buffer.from(pdf);
   } finally {
     await browser.close();
   }
