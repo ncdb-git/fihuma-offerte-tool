@@ -66,10 +66,48 @@ function textValue(value: unknown) {
   return "";
 }
 
-function idFromReference(value: unknown) {
-  if (typeof value === "number" || typeof value === "string") return String(value);
-  if (value && typeof value === "object" && "id" in value) return String((value as { id: unknown }).id);
+/** Pipedrive koppelt person/org/user vaak als `{ value: 123, name: "…" }` — niet als `{ id: … }`. */
+function idFromReference(value: unknown): string {
+  if (typeof value === "number" && !Number.isNaN(value)) return String(value);
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (!value || typeof value !== "object") return "";
+
+  const record = value as Record<string, unknown>;
+  if ("value" in record) {
+    const nested = idFromReference(record.value);
+    if (nested) return nested;
+  }
+  if ("id" in record) {
+    const id = record.id;
+    if (typeof id === "number" && !Number.isNaN(id)) return String(id);
+    if (typeof id === "string" && id.trim()) return id.trim();
+  }
   return "";
+}
+
+function pipedriveV2BaseUrl() {
+  const domain = process.env.PIPEDRIVE_COMPANY_DOMAIN?.trim();
+  return domain ? `https://${domain}.pipedrive.com/api/v2` : null;
+}
+
+/** API v2 levert custom fields soms alleen onder `custom_fields` — flatten naar v1-stijl keys. */
+async function fetchPersonV2Flat(personId: string): Promise<PipedrivePerson> {
+  const base = pipedriveV2BaseUrl();
+  if (!base) return {};
+
+  const response = await fetch(`${base}/persons/${personId}?api_token=${token()}`, { cache: "no-store" });
+  if (!response.ok) {
+    console.warn("[pipedrive] v2 person ophalen mislukt", { personId, status: response.status });
+    return {};
+  }
+
+  const payload = await response.json();
+  const data = (payload.data ?? payload) as PipedrivePerson;
+  const customFields = data.custom_fields;
+  if (customFields && typeof customFields === "object" && !Array.isArray(customFields)) {
+    return { ...data, ...(customFields as Record<string, unknown>) };
+  }
+  return data;
 }
 
 async function pipedriveGet<T>(path: string): Promise<T> {
@@ -90,15 +128,24 @@ export async function fetchPipedriveDealBundle(dealId: string) {
   const personId = idFromReference(deal.person_id);
   const organizationId = idFromReference(deal.org_id);
 
-  const [personFromApi, personFromDeal, organization] = await Promise.all([
-    personId ? pipedriveGet<PipedrivePerson>(`/persons/${personId}`).catch(() => ({})) : Promise.resolve({}),
+  if (!personId && deal.person_id) {
+    console.warn("[pipedrive] geen personId uit deal.person_id", { dealId, person_id: deal.person_id });
+  }
+
+  const [personFromApi, personFromV2, personFromDeal, organization] = await Promise.all([
+    personId ? pipedriveGet<PipedrivePerson>(`/persons/${personId}`).catch((error) => {
+      console.warn("[pipedrive] GET /persons mislukt", { dealId, personId, error });
+      return {};
+    }) : Promise.resolve({}),
+    personId ? fetchPersonV2Flat(personId) : Promise.resolve({}),
     pipedriveGet<PipedrivePerson>(`/deals/${dealId}/person`).catch(() => ({})),
     organizationId ? pipedriveGet<PipedriveOrganization>(`/organizations/${organizationId}`).catch(() => ({})) : Promise.resolve({})
   ]);
 
-  const person = { ...(deal.person_id as PipedrivePerson), ...personFromDeal, ...personFromApi };
+  // Volgorde: deal-person endpoint → v1 person → v2 person (meest complete custom fields)
+  const person = { ...(deal.person_id as PipedrivePerson), ...personFromDeal, ...personFromApi, ...personFromV2 };
 
-  return { deal, person, organization };
+  return { deal, person, organization, meta: { personId, organizationId } };
 }
 
 function measureTypeFromPipedrive(value: string): MeasureType {

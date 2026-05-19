@@ -19,14 +19,26 @@ export async function GET(_: Request, { params }: { params: { dealId: string } }
     const fieldKeys = await discoverAddressFieldKeys();
     const relatedFields = await listAddressRelatedFields();
 
+    const customHashOnRecord = (record: Record<string, unknown>) =>
+      Object.fromEntries(
+        Object.entries(record).filter(
+          ([key, val]) => /^[a-f0-9]{40}$/i.test(key) && val !== null && val !== undefined && val !== ""
+        )
+      );
+
     return NextResponse.json({
       ok: true,
       dealId,
+      personId: bundle.meta?.personId ?? null,
       resolved: {
         address: resolved.address,
         postalCode: resolved.postalCode,
         city: resolved.city,
         sources: resolved.sources
+      },
+      customFieldsWithValues: {
+        person: customHashOnRecord(bundle.person),
+        deal: customHashOnRecord(bundle.deal)
       },
       envConfigured: {
         PIPEDRIVE_FIELD_ADRES: Boolean(process.env.PIPEDRIVE_FIELD_ADRES?.trim()),
