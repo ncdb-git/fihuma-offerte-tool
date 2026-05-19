@@ -43,12 +43,38 @@ function logWebhook(label: string, details?: Record<string, unknown>) {
   console.info(`[pipedrive:webhook] ${label}`);
 }
 
+function serializeWebhookError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    };
+  }
+  if (typeof error === "object" && error !== null) {
+    return error as Record<string, unknown>;
+  }
+  return { message: String(error) };
+}
+
 function logWebhookError(label: string, error: unknown, details?: Record<string, unknown>) {
-  const payload =
-    error instanceof Error
-      ? { message: error.message, stack: error.stack, ...details }
-      : { message: String(error), ...details };
-  console.error(`[pipedrive:webhook] ${label}`, payload);
+  const base = serializeWebhookError(error);
+  const extra = error as { code?: string; details?: string; hint?: string };
+
+  console.error(
+    `[pipedrive:webhook] ${label}`,
+    JSON.stringify(
+      {
+        ...base,
+        code: extra.code,
+        details: extra.details,
+        hint: extra.hint,
+        ...details
+      },
+      null,
+      2
+    )
+  );
 }
 
 function formatStageId(stageId: unknown) {
@@ -143,21 +169,20 @@ export async function POST(request: Request) {
       ...env
     });
   } catch (error) {
-    console.error("[pipedrive:webhook] ERROR", JSON.stringify(error, null, 2));
-
     logWebhookError("ERROR", error, {
       ...env,
       expectedStageId: expected
     });
 
-    const message = error instanceof Error ? error.message : "Webhook fout";
-    const stack = error instanceof Error ? error.stack : undefined;
+    const extra = error as { message?: string; code?: string; details?: string; hint?: string; stack?: string };
+    const message = error instanceof Error ? error.message : extra.message ?? "Webhook fout";
+    const stack = error instanceof Error ? error.stack : extra.stack;
 
     return NextResponse.json(
       {
         ok: false,
         reason: "error",
-        error: { message, stack },
+        error: { message, stack, code: extra.code, details: extra.details, hint: extra.hint },
         expectedStageId: expected,
         ...env
       },
