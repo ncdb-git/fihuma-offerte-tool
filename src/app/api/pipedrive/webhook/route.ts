@@ -135,7 +135,7 @@ export async function POST(request: Request) {
 
     logWebhook("FETCHING_PIPEDRIVE_DEAL", { dealId });
     const bundle = await fetchPipedriveDealBundle(dealId);
-    const proposal = mapPipedriveBundleToProposal(dealId, bundle);
+    const proposal = await mapPipedriveBundleToProposal(dealId, bundle);
 
     logWebhook("UPSERT_STARTED", {
       dealId,

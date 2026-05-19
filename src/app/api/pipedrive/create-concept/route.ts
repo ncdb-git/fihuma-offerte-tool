@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
     console.info("[pipedrive:create-concept] start", { dealId });
     const bundle = await fetchPipedriveDealBundle(dealId);
-    const proposal = mapPipedriveBundleToProposal(dealId, bundle);
+    const proposal = await mapPipedriveBundleToProposal(dealId, bundle);
     const result = await upsertProposalConcept(proposal, "webhook");
     console.info("[pipedrive:create-concept] gelukt", { dealId, proposalId: result.proposal.id });
 

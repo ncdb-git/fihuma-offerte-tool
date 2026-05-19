@@ -62,6 +62,12 @@ function mergePipedriveRefresh(existing: Proposal, incoming: Proposal): Proposal
     customer: {
       ...existing.customer,
       ...incoming.customer,
+      name: incoming.customer.name || existing.customer.name,
+      email: incoming.customer.email || existing.customer.email,
+      phone: incoming.customer.phone || existing.customer.phone,
+      address: incoming.customer.address || existing.customer.address,
+      postalCode: incoming.customer.postalCode || existing.customer.postalCode,
+      city: incoming.customer.city || existing.customer.city,
       pipedriveDealId: incoming.customer.pipedriveDealId || existing.customer.pipedriveDealId,
       pipedriveDealLink: incoming.customer.pipedriveDealLink || existing.customer.pipedriveDealLink
     },

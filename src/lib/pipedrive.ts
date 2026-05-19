@@ -11,9 +11,9 @@ import {
 import { resolveCustomerAddressFromBundle } from "@/lib/pipedrive-address";
 import { Customer, IsdeSubsidyStatus, MeasureType, Proposal } from "@/lib/types";
 
-export const pipedriveBaseUrl = process.env.PIPEDRIVE_COMPANY_DOMAIN
-  ? `https://${process.env.PIPEDRIVE_COMPANY_DOMAIN}.pipedrive.com/api/v1`
-  : "https://api.pipedrive.com/v1";
+import { pipedriveBaseUrl, pipedriveToken } from "@/lib/pipedrive-config";
+
+export { pipedriveBaseUrl } from "@/lib/pipedrive-config";
 
 /** Centrale field mapping — custom field hashes via env (zie .env.example). */
 export function getPipedriveFieldMap() {
@@ -39,10 +39,7 @@ export function getPipedriveFieldMap() {
 export const pipedriveFieldMap = getPipedriveFieldMap();
 
 function token() {
-  if (!process.env.PIPEDRIVE_API_TOKEN) {
-    throw new Error("PIPEDRIVE_API_TOKEN is not configured");
-  }
-  return process.env.PIPEDRIVE_API_TOKEN;
+  return pipedriveToken();
 }
 
 function dealUrl(dealId: string) {
@@ -119,17 +116,18 @@ export function isTargetOfferStage(stageId: unknown) {
   return Boolean(targetStage && String(stageId) === targetStage);
 }
 
-export function mapPipedriveBundleToProposal(dealId: string, bundle: Awaited<ReturnType<typeof fetchPipedriveDealBundle>>): Proposal {
+export async function mapPipedriveBundleToProposal(dealId: string, bundle: Awaited<ReturnType<typeof fetchPipedriveDealBundle>>): Promise<Proposal> {
   const source = { deal: bundle.deal, person: bundle.person, organization: bundle.organization };
   const fields = getPipedriveFieldMap();
-  const addressFields = resolveCustomerAddressFromBundle(bundle);
+  const addressFields = await resolveCustomerAddressFromBundle(bundle);
 
   console.info("[pipedrive] customer address resolved", {
     dealId,
     address: addressFields.address,
     postalCode: addressFields.postalCode,
     city: addressFields.city,
-    sources: addressFields.sources
+    sources: addressFields.sources,
+    fieldKeys: addressFields.debug.fieldKeys
   });
 
   const measureType = measureTypeFromPipedrive(textValue(getPath(source, fields.maatregel)));
@@ -173,7 +171,7 @@ export async function fetchPipedriveCustomer(dealId: string): Promise<Customer> 
   const { deal, person, organization } = bundle;
   const fields = getPipedriveFieldMap();
   const source = { deal, person, organization };
-  const addressFields = resolveCustomerAddressFromBundle(bundle);
+  const addressFields = await resolveCustomerAddressFromBundle(bundle);
 
   return {
     salutation: "familie",

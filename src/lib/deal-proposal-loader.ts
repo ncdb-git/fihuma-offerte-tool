@@ -5,25 +5,30 @@ import { getProposalConceptByDealId, pipedriveRecordId, upsertProposalConcept } 
 import { Proposal } from "@/lib/types";
 
 async function backfillAddressFromPipedrive(proposal: Proposal, dealId: string) {
-  const missing = !proposal.customer.address || !proposal.customer.postalCode || !proposal.customer.city;
-  if (!missing || !process.env.PIPEDRIVE_API_TOKEN) return { proposal, updated: false as const };
+  if (!process.env.PIPEDRIVE_API_TOKEN) return { proposal, updated: false as const };
 
   const bundle = await fetchPipedriveDealBundle(dealId);
-  const address = resolveCustomerAddressFromBundle(bundle);
+  const address = await resolveCustomerAddressFromBundle(bundle);
   if (!address.address && !address.postalCode && !address.city) return { proposal, updated: false as const };
+
+  const nextCustomer = {
+    ...proposal.customer,
+    address: address.address || proposal.customer.address,
+    postalCode: address.postalCode || proposal.customer.postalCode,
+    city: address.city || proposal.customer.city
+  };
+
+  const changed =
+    nextCustomer.address !== proposal.customer.address ||
+    nextCustomer.postalCode !== proposal.customer.postalCode ||
+    nextCustomer.city !== proposal.customer.city;
+
+  if (!changed) return { proposal, updated: false as const };
 
   return {
     updated: true as const,
     sources: address.sources,
-    proposal: {
-      ...proposal,
-      customer: {
-        ...proposal.customer,
-        address: proposal.customer.address || address.address,
-        postalCode: proposal.customer.postalCode || address.postalCode,
-        city: proposal.customer.city || address.city
-      }
-    }
+    proposal: { ...proposal, customer: nextCustomer }
   };
 }
 
@@ -44,7 +49,7 @@ export async function ensureProposalForDeal(dealId: string): Promise<Proposal> {
   if (process.env.PIPEDRIVE_API_TOKEN) {
     try {
       const bundle = await fetchPipedriveDealBundle(dealId);
-      const fromPipedrive = mapPipedriveBundleToProposal(dealId, bundle);
+      const fromPipedrive = await mapPipedriveBundleToProposal(dealId, bundle);
       const result = await upsertProposalConcept(fromPipedrive, "advisor");
       console.info("[create] proposal aangemaakt uit Pipedrive", { dealId, proposalId: result.proposal.id });
       return result.proposal;
