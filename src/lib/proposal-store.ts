@@ -20,6 +20,29 @@ export type ProposalRecord = {
 
 export type UpsertSource = "webhook" | "advisor" | "pdf" | "upload";
 
+export type UpsertStorageResult =
+  | {
+      mode: "supabase";
+      action: "insert" | "update";
+      recordId: string;
+      pipedriveDealId: string;
+      status: string;
+    }
+  | {
+      mode: "file";
+      action: "insert" | "update";
+      recordId: string;
+      pipedriveDealId: string;
+      status: string;
+      filePath: string;
+    };
+
+export type UpsertProposalResult = {
+  proposal: Proposal;
+  created: boolean;
+  storage: UpsertStorageResult;
+};
+
 const DATA_DIR = path.join(process.cwd(), ".data");
 const FILE_STORE_PATH = path.join(DATA_DIR, "proposal-concepts.json");
 
@@ -208,7 +231,7 @@ export async function getProposalConceptById(id: string) {
   return found ? { ...found.proposal, status: normalizeProposalStatus(found.proposal.status) } : null;
 }
 
-export async function upsertProposalConcept(proposal: Proposal, source: UpsertSource = "advisor") {
+export async function upsertProposalConcept(proposal: Proposal, source: UpsertSource = "advisor"): Promise<UpsertProposalResult> {
   const dealId = proposal.customer.pipedriveDealId;
   const storageKey = storageKeyForProposal(proposal);
   const existingConcept = isPipedriveDealId(dealId)
@@ -253,17 +276,27 @@ export async function upsertProposalConcept(proposal: Proposal, source: UpsertSo
       archived_at: isArchivedStatus(nextProposal.status) ? now : null
     };
 
-    const { error: upsertError } = await client.from("proposals").upsert(row, { onConflict: "id" });
+    const created = !existing;
+    const { data: upserted, error: upsertError } = await client.from("proposals").upsert(row, { onConflict: "id" }).select("id, pipedrive_deal_id, status").single();
     if (upsertError) throw upsertError;
+
+    const storage: UpsertStorageResult = {
+      mode: "supabase",
+      action: created ? "insert" : "update",
+      recordId: upserted?.id ?? row.id,
+      pipedriveDealId: upserted?.pipedrive_deal_id ?? row.pipedrive_deal_id,
+      status: upserted?.status ?? row.status
+    };
 
     console.info("[proposal-store] dashboard item saved", {
       storageMode: "supabase",
       proposalId: nextProposal.id,
       pipedriveDealId: dealId,
       status: nextProposal.status,
-      created: !existing
+      created,
+      storage
     });
-    return { proposal: nextProposal, created: !existing };
+    return { proposal: nextProposal, created, storage };
   }
 
   const map = await getLocalStore();
@@ -278,15 +311,26 @@ export async function upsertProposalConcept(proposal: Proposal, source: UpsertSo
   map.set(storageKey, next);
   await persistLocalStore(map);
 
+  const created = !existing;
+  const storage: UpsertStorageResult = {
+    mode: "file",
+    action: created ? "insert" : "update",
+    recordId: next.proposal.id,
+    pipedriveDealId: dealId,
+    status: next.proposal.status,
+    filePath: FILE_STORE_PATH
+  };
+
   console.info("[proposal-store] dashboard item saved", {
     storageMode: "file",
     proposalId: next.proposal.id,
     pipedriveDealId: dealId,
     status: next.proposal.status,
-    created: !existing
+    created,
+    storage
   });
 
-  return { proposal: next.proposal, created: !existing };
+  return { proposal: next.proposal, created, storage };
 }
 
 export async function listProposalRecords({ includeArchived = false, pipedriveOnly = true } = {}): Promise<ProposalRecord[]> {

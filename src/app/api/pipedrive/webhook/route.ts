@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchPipedriveDealBundle, isTargetOfferStage, mapPipedriveBundleToProposal } from "@/lib/pipedrive";
-import { upsertProposalConcept } from "@/lib/proposal-store";
+import { proposalStorageMode, upsertProposalConcept } from "@/lib/proposal-store";
 
 export const runtime = "nodejs";
 
@@ -23,43 +23,143 @@ function isDealUpdate(payload: Record<string, unknown>) {
   return entity === "deal" || action.includes("update") || Boolean(payloadDealId(payload));
 }
 
+function expectedStageId() {
+  return process.env.PIPEDRIVE_OFFERTE_STAGE_ID ?? null;
+}
+
+function storageEnv() {
+  return {
+    supabaseUrlPresent: Boolean(process.env.SUPABASE_URL),
+    supabaseServiceRoleKeyPresent: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    storageMode: proposalStorageMode()
+  };
+}
+
+function logWebhook(label: string, details?: Record<string, unknown>) {
+  if (details) {
+    console.info(`[pipedrive:webhook] ${label}`, details);
+    return;
+  }
+  console.info(`[pipedrive:webhook] ${label}`);
+}
+
+function logWebhookError(label: string, error: unknown, details?: Record<string, unknown>) {
+  const payload =
+    error instanceof Error
+      ? { message: error.message, stack: error.stack, ...details }
+      : { message: String(error), ...details };
+  console.error(`[pipedrive:webhook] ${label}`, payload);
+}
+
+function formatStageId(stageId: unknown) {
+  return stageId === undefined || stageId === null ? null : String(stageId);
+}
+
 export async function POST(request: Request) {
+  const env = storageEnv();
+  const expected = expectedStageId();
+
   try {
     const payload = (await request.json()) as Record<string, unknown>;
     const dealId = payloadDealId(payload);
-    const stageId = payloadStageId(payload);
+    const receivedStageId = formatStageId(payloadStageId(payload));
+    const stageId = receivedStageId;
 
-    console.info("[pipedrive:webhook] received deal_id", { dealId, stageId });
+    console.log("CURRENT STAGE", stageId);
+    console.log("EXPECTED STAGE", process.env.PIPEDRIVE_OFFERTE_STAGE_ID);
+
+    const stageMatch = isTargetOfferStage(receivedStageId);
+
+    logWebhook("WEBHOOK RECEIVED", {
+      dealId: dealId || null,
+      receivedStageId,
+      expectedStageId: expected,
+      stageMatch,
+      ...env,
+      body: payload
+    });
 
     if (!isDealUpdate(payload) || !dealId) {
-      console.info("[pipedrive:webhook] genegeerd: geen deal update");
-      return NextResponse.json({ ok: true, ignored: true, reason: "not_a_deal_update" });
+      logWebhook("IGNORED not_a_deal_update", { dealId: dealId || null });
+      return NextResponse.json({
+        ok: true,
+        reason: "not_a_deal_update",
+        dealId: dealId || null,
+        ...env
+      });
     }
 
-    if (!isTargetOfferStage(stageId)) {
-      console.info("[pipedrive:webhook] genegeerd: stage mismatch", { dealId, stageId, target: process.env.PIPEDRIVE_OFFERTE_STAGE_ID });
-      return NextResponse.json({ ok: true, ignored: true, reason: "stage_mismatch" });
+    if (!stageMatch) {
+      logWebhook("IGNORED stage_mismatch", {
+        dealId,
+        receivedStageId,
+        expectedStageId: expected,
+        stageMatch: false
+      });
+      return NextResponse.json({
+        ok: false,
+        reason: "stage_mismatch",
+        dealId,
+        receivedStageId,
+        expectedStageId: expected,
+        stageMatch: false,
+        ...env
+      });
     }
 
+    logWebhook("FETCHING_PIPEDRIVE_DEAL", { dealId });
     const bundle = await fetchPipedriveDealBundle(dealId);
     const proposal = mapPipedriveBundleToProposal(dealId, bundle);
-    const result = await upsertProposalConcept(proposal, "webhook");
 
-    console.info(result.created ? "[pipedrive:webhook] dashboard item created" : "[pipedrive:webhook] dashboard item updated", {
+    logWebhook("UPSERT_STARTED", {
       dealId,
+      proposalId: proposal.id,
+      storageMode: env.storageMode,
+      supabaseUrlPresent: env.supabaseUrlPresent,
+      supabaseServiceRoleKeyPresent: env.supabaseServiceRoleKeyPresent
+    });
+
+    const result = await upsertProposalConcept(proposal, "webhook");
+    const reason = result.created ? "concept_created" : "concept_updated";
+
+    logWebhook("UPSERT_SUCCESS", {
+      dealId,
+      reason,
       proposalId: result.proposal.id,
-      status: result.proposal.status
+      status: result.proposal.status,
+      storage: result.storage
     });
 
     return NextResponse.json({
       ok: true,
+      reason,
       dealId,
       proposalId: result.proposal.id,
       status: result.proposal.status,
-      action: result.created ? "created" : "updated"
+      receivedStageId,
+      expectedStageId: expected,
+      stageMatch: true,
+      storage: result.storage,
+      ...env
     });
   } catch (error) {
-    console.error("[pipedrive:webhook] fout", error);
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Webhook fout" }, { status: 500 });
+    logWebhookError("ERROR", error, {
+      ...env,
+      expectedStageId: expected
+    });
+
+    const message = error instanceof Error ? error.message : "Webhook fout";
+    const stack = error instanceof Error ? error.stack : undefined;
+
+    return NextResponse.json(
+      {
+        ok: false,
+        reason: "error",
+        error: { message, stack },
+        expectedStageId: expected,
+        ...env
+      },
+      { status: 500 }
+    );
   }
 }
