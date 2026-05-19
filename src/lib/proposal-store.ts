@@ -7,6 +7,12 @@ type StoredProposal = {
   updatedAt: string;
 };
 
+export type ProposalRecord = {
+  proposal: Proposal;
+  createdAt: string;
+  updatedAt: string;
+};
+
 declare global {
   // eslint-disable-next-line no-var
   var fihumaProposalConcepts: Map<string, StoredProposal> | undefined;
@@ -22,6 +28,10 @@ function store() {
 function supabase() {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return null;
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+}
+
+export function proposalStorageMode() {
+  return supabase() ? "supabase" : "memory";
 }
 
 function isPipedriveDealId(dealId: string) {
@@ -84,6 +94,7 @@ export async function upsertProposalConcept(proposal: Proposal) {
 
     const { error: upsertError } = await client.from("proposals").upsert(row, { onConflict: "id" });
     if (upsertError) throw upsertError;
+    console.info("[proposal-store] proposal saved", { storageMode: "supabase", proposalId: nextProposal.id, pipedriveDealId: dealId, status: nextProposal.status });
     return { proposal: nextProposal, created: !existing };
   }
 
@@ -99,16 +110,54 @@ export async function upsertProposalConcept(proposal: Proposal) {
   };
 
   store().set(storageKey, next);
+  console.info("[proposal-store] proposal saved", { storageMode: "memory", proposalId: next.proposal.id, pipedriveDealId: dealId, status: next.proposal.status });
   return { proposal: next.proposal, created: !existing };
 }
 
-export async function listProposalConcepts() {
+export async function listProposalRecords({ includeArchived = false } = {}): Promise<ProposalRecord[]> {
   const client = supabase();
   if (client) {
-    const { data, error } = await client.from("proposals").select("proposal_data").order("updated_at", { ascending: false });
+    let query = client.from("proposals").select("proposal_data, created_at, updated_at, status").order("updated_at", { ascending: false });
+    if (!includeArchived) query = query.neq("status", "archived").neq("status", "gearchiveerd");
+    const { data, error } = await query;
     if (error) throw error;
-    return (data ?? []).map((entry) => entry.proposal_data as Proposal);
+    return (data ?? []).map((entry) => ({
+      proposal: entry.proposal_data as Proposal,
+      createdAt: entry.created_at,
+      updatedAt: entry.updated_at
+    }));
   }
 
-  return Array.from(store().values()).map((entry) => entry.proposal);
+  return Array.from(store().values())
+    .filter((entry) => includeArchived || (entry.proposal.status !== "archived" && entry.proposal.status !== "gearchiveerd"))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .map((entry) => ({ proposal: entry.proposal, createdAt: entry.createdAt, updatedAt: entry.updatedAt }));
+}
+
+export async function listProposalConcepts() {
+  return (await listProposalRecords()).map((entry) => entry.proposal);
+}
+
+export async function updateProposalStatus(id: string, status: Proposal["status"]) {
+  const client = supabase();
+  if (client) {
+    const { data, error: selectError } = await client.from("proposals").select("proposal_data").eq("id", id).maybeSingle();
+    if (selectError) throw selectError;
+    if (!data?.proposal_data) throw new Error(`Proposal ${id} niet gevonden`);
+    const proposal = { ...(data.proposal_data as Proposal), status };
+    const { error: updateError } = await client
+      .from("proposals")
+      .update({ status, proposal_data: proposal, updated_at: new Date().toISOString(), archived_at: status === "archived" ? new Date().toISOString() : null })
+      .eq("id", id);
+    if (updateError) throw updateError;
+    console.info("[proposal-store] proposal status updated", { storageMode: "supabase", proposalId: id, status });
+    return proposal;
+  }
+
+  const entry = store().get(id) ?? Array.from(store().values()).find((value) => value.proposal.id === id);
+  if (!entry) throw new Error(`Proposal ${id} niet gevonden`);
+  const next = { ...entry, proposal: { ...entry.proposal, status }, updatedAt: new Date().toISOString() };
+  store().set(storageKeyForProposal(next.proposal), next);
+  console.info("[proposal-store] proposal status updated", { storageMode: "memory", proposalId: id, status });
+  return next.proposal;
 }

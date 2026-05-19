@@ -5,6 +5,7 @@ export type ProposalStatus =
   | "Bijgewerkt vanuit Pipedrive"
   | "offerte gegenereerd"
   | "verstuurd"
+  | "archived"
   | "gearchiveerd";
 
 export type MeasureType = "spouwmuur" | "vloer" | "bodem" | "dak";
