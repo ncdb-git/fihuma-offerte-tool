@@ -324,66 +324,76 @@ function cleanSubsidyDescription(description: string) {
 
 function InvestmentTable({ measure, paymentTerms }: { measure: Measure; paymentTerms: string }) {
   const brutoTotal = measureBrutoTotal(measure);
-  const extraTotal = measureExtraWorkTotal(measure);
   const adjustmentsTotal = measureAdjustmentsTotal(measure);
-  const subsidyTotal = measure.subsidies.reduce((sum, line) => sum + Math.abs(line.amount), 0);
+  const payableToFihuma = brutoTotal + adjustmentsTotal;
   const showDepositSchedule = paymentTerms === PAYMENT_TERM_OPTIONS[0].text;
 
   return (
-    <div className="investment-wrap">
-      <div className="investment-table">
-        <div className="investment-table__row">
-          <span className="investment-table__desc">
-            Basis isolatie ({measure.squareMeters} m² {measure.productName})
-          </span>
-          <strong className="investment-table__amt">{money(measure.grossInvestment)}</strong>
-        </div>
-        {measure.extraWork.map((row) => (
-          <div className="investment-table__row" key={row.id}>
-            <span className="investment-table__desc">{row.description}</span>
-            <strong className="investment-table__amt">{money(row.amount)}</strong>
-          </div>
-        ))}
-        {(measure.adjustments ?? []).map((row) => (
-          <div className="investment-table__row" key={row.id}>
-            <span className="investment-table__desc">{row.description || "Korting / toeslag"}</span>
-            <strong className={`investment-table__amt ${row.amount < 0 ? "investment-table__row--credit" : ""}`}>
-              {money(row.amount)}
-            </strong>
-          </div>
-        ))}
-        <div className="investment-table__row investment-table__row--muted">
-          <span className="investment-table__desc">Subtotaal bruto (incl. meerwerk)</span>
-          <strong className="investment-table__amt">{money(brutoTotal + adjustmentsTotal)}</strong>
-        </div>
-        {measure.subsidies.map((row) => (
-          <div className="investment-table__row investment-table__row--credit" key={row.id}>
-            <span className="investment-table__desc">{cleanSubsidyDescription(row.description)}</span>
-            <strong className="investment-table__amt">− {money(Math.abs(row.amount))}</strong>
-          </div>
-        ))}
-        {showDepositSchedule ? (
-          <>
-            <div className="investment-table__row investment-table__row--muted">
-              <span className="investment-table__desc">25% bij akkoord</span>
-              <strong className="investment-table__amt">{money((brutoTotal + adjustmentsTotal) * 0.25)}</strong>
-            </div>
-            <div className="investment-table__row investment-table__row--muted">
-              <span className="investment-table__desc">75% achteraf na oplevering</span>
-              <strong className="investment-table__amt">{money((brutoTotal + adjustmentsTotal) * 0.75)}</strong>
-            </div>
-          </>
-        ) : null}
-      </div>
+    <div className="investment-wrap investment-wrap--stacked">
+      <section className="investment-card investment-card--breakdown">
+        <p className="investment-card__title">Prijsopbouw</p>
 
-      <div className="investment-net investment-net--brand">
-        <span>Netto investering</span>
-        <strong>{money(measure.netInvestment)}</strong>
-      </div>
-      <p className="investment-breakdown-note">
-        Na verrekening van {subsidyTotal > 0 ? money(subsidyTotal) : money(0)} aan subsidies
-        {extraTotal > 0 ? ` en ${money(extraTotal)} meerwerk` : ""}.
-      </p>
+        <div className="investment-mini-list">
+          <div>
+            <span>
+              {measure.squareMeters} m² {measure.productName} {measure.title.toLowerCase()}
+            </span>
+            <strong>{money(measure.grossInvestment)}</strong>
+          </div>
+          {measure.extraWork.map((row) => (
+            <div key={row.id}>
+              <span>{row.description}</span>
+              <strong>{money(row.amount)}</strong>
+            </div>
+          ))}
+          {(measure.adjustments ?? []).map((row) => (
+            <div key={row.id}>
+              <span>{row.description || "Korting / toeslag"}</span>
+              <strong>{money(row.amount)}</strong>
+            </div>
+          ))}
+        </div>
+
+        <div className="investment-total">
+          <span>U betaalt aan Fihuma Isolatie</span>
+          <strong>{money(payableToFihuma)}</strong>
+        </div>
+
+        {showDepositSchedule ? (
+          <div className="payment-schedule">
+            <div>
+              <span>25% bij akkoord</span>
+              <strong>{money(payableToFihuma * 0.25)}</strong>
+            </div>
+            <div>
+              <span>75% achteraf na oplevering</span>
+              <strong>{money(payableToFihuma * 0.75)}</strong>
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="investment-card investment-card--subsidy">
+        <p className="investment-card__title">Subsidie en netto investering</p>
+
+        <div className="investment-table investment-table--summary">
+          <div className="investment-table__row">
+            <span className="investment-table__desc">Bruto investering</span>
+            <strong className="investment-table__amt">{money(payableToFihuma)}</strong>
+          </div>
+          {measure.subsidies.map((row) => (
+            <div className="investment-table__row investment-table__row--credit" key={row.id}>
+              <span className="investment-table__desc">{cleanSubsidyDescription(row.description)}</span>
+              <strong className="investment-table__amt">− {money(Math.abs(row.amount))}</strong>
+            </div>
+          ))}
+        </div>
+
+        <div className="investment-net investment-net--total investment-net--brand">
+          <span className="investment-net__label">Uw netto investering na ontvangst subsidie bedraagt</span>
+          <strong className="investment-net__value">{money(measure.netInvestment)}</strong>
+        </div>
+      </section>
     </div>
   );
 }
@@ -445,10 +455,10 @@ function MeasureBlock({ measure }: { measure: Measure }) {
 function InvestmentPage({ proposal, measure }: { proposal: Proposal; measure: Measure }) {
   return (
     <ProposalPageShell className="investment-page">
-      <p className="eyebrow">Uw investering</p>
-      <h2>Comfortabeler wonen met lagere energiekosten.</h2>
+      <p className="eyebrow">Investering</p>
+      <h2>Heldere investering voor {measure.title.toLowerCase()}</h2>
       <p className="lead lead--wide">
-        Een helder overzicht van de investering, het subsidievoordeel en het bedrag dat uiteindelijk voor u overblijft.
+        Hieronder ziet u de prijsopbouw, het bedrag dat u aan ons betaalt en uw netto investering na verrekening van subsidies.
       </p>
       <InvestmentTable measure={measure} paymentTerms={proposal.agreement.paymentTerms} />
     </ProposalPageShell>

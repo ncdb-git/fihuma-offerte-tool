@@ -837,6 +837,11 @@ blockquote cite {
   page-break-inside: avoid;
 }
 
+.investment-wrap--stacked {
+  display: grid;
+  gap: 22px;
+}
+
 .investment-page .lead {
   margin-bottom: 18px;
 }
@@ -914,13 +919,29 @@ blockquote cite {
   page-break-inside: avoid;
 }
 
-.investment-card--breakdown {
+.investment-card--breakdown,
+.investment-card--subsidy {
   background: #fff;
   border: 1px solid rgba(218, 224, 219, 0.85);
   border-radius: 24px;
   border-top: 5px solid var(--green);
   box-shadow: 0 16px 42px rgba(23, 34, 29, 0.055);
   padding: 26px 28px;
+}
+
+.investment-card--subsidy {
+  margin-top: 0;
+}
+
+.investment-card--subsidy .investment-table {
+  border: 0;
+  border-radius: 0;
+  margin-top: 8px;
+}
+
+.investment-card--subsidy .investment-table__row {
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .investment-card__title {
@@ -1135,30 +1156,40 @@ blockquote cite {
 
 .investment-net--brand {
   background: linear-gradient(135deg, #1f6b45 0%, #2d8f5c 55%, #3cab6f 100%);
-  border: 2px solid #1a5c3a;
+  border: none;
   border-radius: 14px;
   box-shadow: 0 12px 32px rgba(31, 107, 69, 0.28);
   color: #fff;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 16px;
-  padding: 20px 22px;
 }
 
-.investment-net--brand span {
-  color: #e8f5ec;
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0.1em;
+.investment-net--total.investment-net--brand {
+  align-items: center;
+  flex-direction: row;
+  gap: 24px;
+  justify-content: space-between;
+  margin-top: 18px;
+  padding: 20px 24px;
+}
+
+.investment-net--total.investment-net--brand .investment-net__label {
+  color: rgba(255, 255, 255, 0.95);
+  flex: 1;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.35;
+  max-width: 16rem;
   text-transform: uppercase;
 }
 
-.investment-net--brand strong {
+.investment-net--total.investment-net--brand .investment-net__value {
   color: #fff;
-  font-size: 2.4rem;
+  font-size: 2.75rem;
+  font-variant-numeric: tabular-nums;
   font-weight: 950;
   letter-spacing: -0.04em;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .agreement-card-grid--four {
@@ -1168,29 +1199,32 @@ blockquote cite {
 .investment-total {
   align-items: baseline;
   background: #f4f5f2;
-  border: 1px solid rgba(23, 34, 29, 0.12);
-  border-radius: 10px;
+  border: 1px solid rgba(23, 34, 29, 0.1);
+  border-radius: 12px;
   color: var(--ink);
   display: flex;
   gap: 16px;
   justify-content: space-between;
-  margin-top: 10px;
-  padding: 13px 14px;
+  margin-top: 22px;
+  padding: 16px 18px;
 }
 
 .investment-total span {
   color: var(--ink);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 900;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
+  line-height: 1.3;
+  max-width: 14rem;
   text-transform: uppercase;
 }
 
 .investment-total strong {
   color: var(--ink);
-  font-size: 1.25rem;
+  font-size: 1.65rem;
   font-variant-numeric: tabular-nums;
-  font-weight: 800;
+  font-weight: 900;
+  letter-spacing: -0.03em;
   white-space: nowrap;
 }
 
