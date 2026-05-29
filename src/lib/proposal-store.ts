@@ -16,6 +16,7 @@ import {
   buildSupabaseProposalPayload,
   findProposalRowByDealId,
   findProposalRowByLookupId,
+  formatSupabaseError,
   logSupabaseError,
   logSupabaseProposalPayload,
   PROPOSALS_TABLE,
@@ -215,21 +216,15 @@ async function upsertSupabaseProposal(proposal: Proposal, source: UpsertSource, 
 
   logSupabaseProposalPayload(payloadRecord);
 
-  const { data: upserted, error: upsertError } = await client
-    .from(PROPOSALS_TABLE)
-    .upsert(payloadRecord, { onConflict: "proposal_id" })
-    .select("id, pipedrive_deal_id, proposal_id, status")
-    .single();
+  const writeQuery = existingRow?.id
+    ? client.from(PROPOSALS_TABLE).update(payloadRecord).eq("id", existingRow.id)
+    : client.from(PROPOSALS_TABLE).insert(payloadRecord);
+
+  const { data: upserted, error: upsertError } = await writeQuery.select("id, pipedrive_deal_id, proposal_id, status").single();
 
   if (upsertError) {
     logSupabaseError(upsertError, payloadRecord);
-    const code = (upsertError as { code?: string }).code;
-    if (code === "23505" && isPipedriveDealId(dealId ?? "")) {
-      throw new Error(
-        "Er bestaat al een offerte voor deze deal in de database. Voer de Supabase-migratie supabase/migrations/20250520120000_proposals_multi_per_deal.sql uit om meerdere concepten per klant toe te staan."
-      );
-    }
-    throw upsertError;
+    throw new Error(formatSupabaseError(upsertError));
   }
 
   const storage: UpsertStorageResult = {
@@ -341,7 +336,11 @@ export async function upsertProposalConcept(proposal: Proposal, source: UpsertSo
 
   const client = supabaseClient();
   if (client) {
-    return upsertSupabaseProposal(nextProposal, source, existingConcept);
+    try {
+      return await upsertSupabaseProposal(nextProposal, source, existingConcept);
+    } catch (error) {
+      console.error("[proposal-store] Supabase upsert mislukt — fallback naar lokaal bestand", error);
+    }
   }
 
   const map = await getLocalStore();

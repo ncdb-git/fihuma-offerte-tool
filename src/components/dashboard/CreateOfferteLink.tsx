@@ -15,10 +15,16 @@ export function CreateOfferteLink() {
 
     try {
       const response = await fetch("/api/proposals/manual", { method: "POST" });
-      const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; proposal?: { id: string } };
+      const raw = await response.text();
+      let payload: { ok?: boolean; error?: string; proposal?: { id: string } } = {};
+      try {
+        payload = raw ? (JSON.parse(raw) as typeof payload) : {};
+      } catch {
+        throw new Error(`Server antwoordde onverwacht (${response.status}). Probeer opnieuw of neem contact op met support.`);
+      }
 
       if (!response.ok || !payload.ok || !payload.proposal?.id) {
-        throw new Error(payload.error ?? "Blanco offerte aanmaken mislukt.");
+        throw new Error(payload.error ?? `Opslaan mislukt (HTTP ${response.status}).`);
       }
 
       router.push(`/create?id=${encodeURIComponent(payload.proposal.id)}`);

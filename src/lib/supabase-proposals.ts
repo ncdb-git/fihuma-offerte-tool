@@ -116,11 +116,12 @@ export function validateSupabaseProposalPayload(payload: Record<string, unknown>
   return issues;
 }
 
-/** Unieke sleutel voor Supabase — echte deals gebruiken deal_id, handmatige offertes `manual-{proposal_id}`. */
+/** Unieke sleutel voor Supabase — echte deals gebruiken deal_id, handmatige offertes `manual-{suffix}`. */
 export function storagePipedriveDealId(proposal: Proposal): string {
   const dealId = proposal.customer.pipedriveDealId?.trim() ?? "";
   if (isPipedriveDealId(dealId)) return dealId;
-  return `manual-${proposal.id}`;
+  const suffix = proposal.id.replace(/^FIH-manual-/, "") || Date.now().toString(36).slice(-8);
+  return `manual-${suffix}`;
 }
 
 export function isManualStorageDealId(pipedriveDealId: string) {
@@ -145,7 +146,7 @@ export function buildSupabaseProposalPayload(
     advisor: sanitizeForJsonb(proposal.advisor) as unknown as Record<string, unknown>,
     customer: sanitizeForJsonb(proposal.customer) as unknown as Record<string, unknown>,
     proposal_data: sanitizeForJsonb({ ...proposal, id: proposal.id, status: normalizeProposalStatus(proposal.status) }),
-    pipedrive_deal_url: proposal.customer.pipedriveDealLink ?? null,
+    pipedrive_deal_url: proposal.customer.pipedriveDealLink?.trim() || null,
     updated_at: now
   };
 
@@ -171,6 +172,23 @@ export function logSupabaseError(error: unknown, payload: Record<string, unknown
     hint: err.hint,
     payloadKeys: Object.keys(payload)
   });
+}
+
+export function formatSupabaseError(error: unknown): string {
+  const err = error as { code?: string; message?: string; details?: string; hint?: string };
+  const message = err.message ?? String(error);
+
+  if (err.code === "23505") {
+    return "Deze offerte bestaat al in de database. Voer de migratie supabase/migrations/20250520120000_proposals_multi_per_deal.sql uit als u meerdere offertes per klant nodig heeft.";
+  }
+  if (message.includes("no unique or exclusion constraint") && message.includes("ON CONFLICT")) {
+    return "Database-migratie ontbreekt: voer supabase/migrations/20250520120000_proposals_multi_per_deal.sql uit in Supabase.";
+  }
+  if (err.code === "PGRST204" || message.includes("Could not find")) {
+    return `Database-kolom ontbreekt. Controleer of migratie supabase/migrations/20250519200000_proposals_v2_definitive.sql is gedraaid. (${message})`;
+  }
+
+  return message;
 }
 
 export async function findProposalRowByDealId(client: SupabaseClient, dealId: string) {

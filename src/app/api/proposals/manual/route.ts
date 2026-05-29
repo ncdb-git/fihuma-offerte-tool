@@ -8,7 +8,15 @@ export async function POST() {
   try {
     const proposal = createBlankManualProposal();
     const result = await upsertProposalConcept(proposal, "advisor");
-    return NextResponse.json({ ok: true, proposal: result.proposal });
+    return NextResponse.json({
+      ok: true,
+      proposal: result.proposal,
+      storageMode: result.storage.mode,
+      persistenceWarning:
+        result.storage.mode === "file"
+          ? "Offerte opgeslagen in lokaal bestand op de server. Zet SUPABASE_URL en SUPABASE_SERVICE_ROLE_KEY voor permanente opslag."
+          : null
+    });
   } catch (error) {
     console.error("[proposals:manual] fout", error);
     return NextResponse.json(
