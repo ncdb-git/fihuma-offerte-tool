@@ -1,3 +1,5 @@
+import "server-only";
+
 import fs from "node:fs/promises";
 import path from "node:path";
 import { isArchivedStatus, normalizeProposalStatus } from "@/lib/proposal-status";

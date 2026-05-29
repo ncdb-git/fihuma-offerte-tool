@@ -30,7 +30,7 @@ import {
   SUBSIDY_CLAUSE_OPTIONS,
   type BuilderModules
 } from "@/lib/proposal-engine";
-import { proposalDisplayTitle } from "@/lib/deal-proposal-loader";
+import { proposalDisplayTitle } from "@/lib/proposal-engine";
 import { isPipedriveDealId } from "@/lib/proposal-store-ids";
 import { Measure, MeasureType, Proposal, Salutation } from "@/lib/types";
 import { normalizeProposalStatus } from "@/lib/proposal-status";

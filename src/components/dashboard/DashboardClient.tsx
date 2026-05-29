@@ -3,8 +3,7 @@
 import { Archive, Copy, FileDown, Search, SlidersHorizontal, Trash2, UploadCloud } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { proposalDisplayTitle } from "@/lib/deal-proposal-loader";
-import { formatProposalPdfFilename, money } from "@/lib/proposal-engine";
+import { formatProposalPdfFilename, money, proposalDisplayTitle } from "@/lib/proposal-engine";
 import { normalizeProposalStatus } from "@/lib/proposal-status";
 import { isPipedriveDealId } from "@/lib/proposal-store-ids";
 import { Proposal } from "@/lib/types";

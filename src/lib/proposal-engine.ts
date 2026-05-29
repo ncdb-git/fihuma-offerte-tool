@@ -558,6 +558,14 @@ export function getProductKeyForMeasure(measure: Measure): string {
   return MAIN_PRODUCTS[measure.type][0]?.key ?? "pif35";
 }
 
+export function proposalDisplayTitle(proposal: Pick<Proposal, "title" | "id" | "measures">) {
+  const measure = proposal.measures[0];
+  if (measure) {
+    return `${MEASURE_TYPE_LABELS[measure.type]} offerte`;
+  }
+  return proposal.title || proposal.id;
+}
+
 export function isolationLabelForType(type: Measure["type"]): string {
   const labels: Record<Measure["type"], string> = {
     spouwmuur: "Spouwmuur",

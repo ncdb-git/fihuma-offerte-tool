@@ -1,6 +1,8 @@
 import { fetchPipedriveDealBundle, mapPipedriveBundleToProposal } from "@/lib/pipedrive";
 import { resolveCustomerAddressFromBundle } from "@/lib/pipedrive-address";
-import { createGuidedProposal, MEASURE_TYPE_LABELS } from "@/lib/proposal-engine";
+import "server-only";
+
+import { createGuidedProposal } from "@/lib/proposal-engine";
 import {
   generateProposalId,
   getProposalConceptById,
@@ -105,12 +107,4 @@ export async function ensureProposalForDeal(dealId: string, options: EnsureOptio
 
   const created = await createNewProposalForDeal(dealId);
   return { proposal: created, siblings: await listProposalsByDealId(dealId) };
-}
-
-export function proposalDisplayTitle(proposal: Proposal) {
-  const measure = proposal.measures[0];
-  if (measure) {
-    return `${MEASURE_TYPE_LABELS[measure.type]} offerte`;
-  }
-  return proposal.title || proposal.id;
 }

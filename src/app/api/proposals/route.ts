@@ -5,10 +5,15 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const dealId = new URL(request.url).searchParams.get("deal_id")?.trim() ?? "";
     const storageMode = proposalStorageMode();
-    const records = await listProposalRecords({ pipedriveOnly: true, includeArchived: false });
+    let records = await listProposalRecords({ pipedriveOnly: true, includeArchived: false });
+
+    if (dealId) {
+      records = records.filter((entry) => entry.proposal.customer.pipedriveDealId === dealId);
+    }
 
     console.info("[api:proposals] dashboard fetch", { storageMode, count: records.length });
 
