@@ -4,7 +4,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { isArchivedStatus, normalizeProposalStatus } from "@/lib/proposal-status";
 import { generateProposalId, isPipedriveDealId, storageKeyForProposal } from "@/lib/proposal-store-ids";
-import { finalizeProposalForStore, normalizeMeasure, stripLegacyDemoPricingFromProposal } from "@/lib/proposal-engine";
+import {
+  finalizeProposalForStore,
+  normalizeMeasure,
+  sanitizeProposalCopy,
+  stripLegacyDemoPricingFromProposal
+} from "@/lib/proposal-engine";
 import type { ProposalRecord, UpsertProposalResult, UpsertSource, UpsertStorageResult } from "@/lib/proposal-store-types";
 import { Proposal, ProposalStatus } from "@/lib/types";
 import {
@@ -165,7 +170,7 @@ function isPipedriveRecord(proposal: Proposal) {
 
 function proposalFromRow(proposalData: unknown): Proposal | null {
   if (!proposalData || typeof proposalData !== "object") return null;
-  const proposal = stripLegacyDemoPricingFromProposal(proposalData as Proposal);
+  const proposal = sanitizeProposalCopy(stripLegacyDemoPricingFromProposal(proposalData as Proposal));
   return {
     ...proposal,
     status: normalizeProposalStatus(proposal.status),

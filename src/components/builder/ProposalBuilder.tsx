@@ -19,6 +19,7 @@ import {
   defaultModules,
   formatProposalPdfFilename,
   getProductKeyForMeasure,
+  isMeasureDraft,
   ISDE_SUBSIDY_STATUS_OPTIONS,
   isolationLabelForType,
   MAIN_PRODUCTS,
@@ -105,6 +106,10 @@ export function ProposalBuilder({
   const [creatingSibling, setCreatingSibling] = useState(false);
 
   const measure = proposal.measures[0];
+  const previewDraft = measure ? isMeasureDraft(measure) : true;
+  const pipedriveDealUrl =
+    proposal.customer.pipedriveDealLink?.trim() ||
+    (dealId && isPipedriveDealId(dealId) ? `https://app.pipedrive.com/deal/${dealId}` : "");
   const total = useMemo(() => proposal.measures.reduce((sum, m) => sum + m.netInvestment, 0), [proposal.measures]);
   const extraTotal = measure ? measureExtraWorkTotal(measure) : 0;
   const brutoTotal = measure ? measureBrutoTotal(measure) : 0;
@@ -290,7 +295,12 @@ export function ProposalBuilder({
         })
       });
 
-      const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; message?: string };
+      const payload = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        message?: string;
+        dealUrl?: string;
+      };
       if (!response.ok || payload.ok === false) {
         const errorText = payload.error ?? payload.message ?? `Upload mislukt (HTTP ${response.status})`;
         console.error("[builder] pipedrive upload mislukt", { status: response.status, payload });
@@ -299,7 +309,13 @@ export function ProposalBuilder({
 
       setProposal((prev) => ({ ...prev, status: "Geüpload naar Pipedrive" }));
       setPipedriveUploadState("success");
-      setPipedriveUploadMessage("PDF is toegevoegd aan Pipedrive");
+      const dealUrl = (payload.dealUrl as string | undefined) || pipedriveDealUrl;
+      setPipedriveUploadMessage(
+        dealUrl ? "PDF is toegevoegd aan Pipedrive. U kunt de deal hier openen." : "PDF is toegevoegd aan Pipedrive"
+      );
+      if (dealUrl && typeof window !== "undefined") {
+        window.open(dealUrl, "_blank", "noopener,noreferrer");
+      }
 
       window.setTimeout(() => {
         setPipedriveUploadState((state) => (state === "success" ? "idle" : state));
@@ -365,13 +381,25 @@ export function ProposalBuilder({
       </button>
       <aside className="flex h-screen flex-col border-r border-fihuma-line bg-white">
         <div className="shrink-0 border-b border-fihuma-line px-5 py-4">
-          <button
-            className="mb-3 flex items-center gap-2 text-xs font-black text-[#64736b] transition hover:text-fihuma-green"
-            onClick={backToDashboard}
-            type="button"
-          >
-            <ArrowLeft size={15} /> Terug naar dashboard
-          </button>
+          <div className="mb-3 flex flex-wrap items-center gap-3">
+            <button
+              className="flex items-center gap-2 text-xs font-black text-[#64736b] transition hover:text-fihuma-green"
+              onClick={backToDashboard}
+              type="button"
+            >
+              <ArrowLeft size={15} /> Terug naar dashboard
+            </button>
+            {pipedriveDealUrl ? (
+              <a
+                className="text-xs font-bold text-fihuma-green underline"
+                href={pipedriveDealUrl}
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                Naar Pipedrive-deal
+              </a>
+            ) : null}
+          </div>
           <div className="flex items-center justify-between gap-2">
             <div>
               <p className="text-[10px] font-black uppercase tracking-wider text-fihuma-green">Configurator</p>
@@ -851,7 +879,9 @@ export function ProposalBuilder({
       </aside>
 
       <section className="builder-preview h-screen overflow-auto px-6 py-6">
-        <p className="mb-2 text-xs font-black uppercase tracking-wider text-fihuma-green">Live preview</p>
+        <p className="mb-2 text-xs font-black uppercase tracking-wider text-fihuma-green">
+          Live preview{previewDraft ? " · algemene opzet" : ""}
+        </p>
         <ProposalDocument proposal={proposal} />
       </section>
     </div>

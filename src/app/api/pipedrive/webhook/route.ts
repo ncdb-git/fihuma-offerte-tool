@@ -133,22 +133,14 @@ export async function POST(request: Request) {
       });
     }
 
-    const existingForDeal = await listProposalsByDealId(dealId);
-    if (existingForDeal.length > 0) {
-      logWebhook("SKIP_EXISTING_CONCEPT", { dealId, count: existingForDeal.length });
-      return NextResponse.json({
-        ok: true,
-        reason: "concept_already_exists",
-        dealId,
-        proposalId: existingForDeal[0].proposal.id,
-        stageMatch: true,
-        ...env
-      });
-    }
-
     logWebhook("FETCHING_PIPEDRIVE_DEAL", { dealId });
     const bundle = await fetchPipedriveDealBundle(dealId);
-    const proposal = await mapPipedriveBundleToProposal(dealId, bundle);
+    const fromPipedrive = await mapPipedriveBundleToProposal(dealId, bundle);
+    const existingForDeal = await listProposalsByDealId(dealId);
+    const proposal =
+      existingForDeal.length > 0
+        ? { ...fromPipedrive, id: existingForDeal[0].proposal.id, quoteNumber: existingForDeal[0].proposal.quoteNumber ?? existingForDeal[0].proposal.id }
+        : fromPipedrive;
 
     logWebhook("UPSERT_STARTED", {
       dealId,

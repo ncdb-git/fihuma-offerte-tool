@@ -1,20 +1,28 @@
 import { AuthGate } from "@/components/auth/AuthGate";
 import { ProposalBuilder } from "@/components/builder/ProposalBuilder";
 import { ensureProposalForDeal } from "@/lib/deal-proposal-loader";
-import { createGuidedProposal } from "@/lib/proposal-engine";
-import { getProposalConceptById, proposalStorageMode } from "@/lib/proposal-store";
+import { createBlankManualProposal } from "@/lib/proposal-engine";
+import { getProposalConceptById, proposalStorageMode, upsertProposalConcept } from "@/lib/proposal-store";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function CreateProposalPage({
   searchParams
 }: {
-  searchParams: { deal_id?: string; id?: string; proposal_id?: string; new?: string };
+  searchParams: { deal_id?: string; id?: string; proposal_id?: string; new?: string; manual?: string };
 }) {
   const manualId = searchParams.id ?? `manual-${Date.now()}`;
   const dealId = searchParams.deal_id;
   const proposalId = searchParams.proposal_id;
   const createNew = searchParams.new === "1";
+  const startManual = searchParams.manual === "1";
+
+  if (startManual) {
+    const proposal = createBlankManualProposal();
+    const result = await upsertProposalConcept(proposal, "advisor");
+    redirect(`/create?id=${encodeURIComponent(result.proposal.id)}`);
+  }
 
   if (dealId) {
     try {
@@ -52,17 +60,24 @@ export default async function CreateProposalPage({
   }
 
   const storedProposal = await getProposalConceptById(manualId);
-  const proposal = storedProposal ?? createGuidedProposal(manualId);
+  if (storedProposal) {
+    return (
+      <AuthGate>
+        <ProposalBuilder initialProposal={storedProposal} />
+      </AuthGate>
+    );
+  }
+
+  const created = await upsertProposalConcept(createBlankManualProposal(), "advisor");
 
   console.info("[create] handmatige offerte", {
     storageMode: proposalStorageMode(),
-    found: Boolean(storedProposal),
-    proposalId: proposal.id
+    proposalId: created.proposal.id
   });
 
   return (
     <AuthGate>
-      <ProposalBuilder initialProposal={proposal} />
+      <ProposalBuilder initialProposal={created.proposal} />
     </AuthGate>
   );
 }

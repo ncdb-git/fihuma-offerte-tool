@@ -3,7 +3,9 @@ import {
   applyProductToMeasure,
   createGuidedProposal,
   createBlankMeasure,
+  createPlaceholderMeasure,
   finalizeMeasureForStore,
+  sanitizeProposalCopy,
   ISDE_SUBSIDY_STATUS_OPTIONS,
   isolationLabelForType,
   MAIN_PRODUCTS
@@ -183,19 +185,24 @@ export async function mapPipedriveBundleToProposal(dealId: string, bundle: Await
     fieldKeys: addressFields.debug.fieldKeys
   });
 
-  const measureType = measureTypeFromPipedrive(textValue(getPath(source, fields.maatregel)));
+  const maatregelRaw = textValue(getPath(source, fields.maatregel));
+  const measureType = measureTypeFromPipedrive(maatregelRaw);
   const squareMeters = Number(textValue(getPath(source, fields.oppervlakte))) || 0;
   const subsidyStatus = subsidyStatusFromPipedrive(textValue(getPath(source, fields.subsidieOptie)));
-  const firstProduct = MAIN_PRODUCTS[measureType][0]?.key ?? "pif35";
-  const baseMeasure = createBlankMeasure(measureType);
-  const withProduct = applyProductToMeasure({ ...baseMeasure, squareMeters, subsidyStatus }, firstProduct);
-  const measure = finalizeMeasureForStore(withProduct);
+  const measure = maatregelRaw.trim()
+    ? finalizeMeasureForStore(
+        applyProductToMeasure(
+          { ...createBlankMeasure(measureType), squareMeters, subsidyStatus },
+          MAIN_PRODUCTS[measureType][0]?.key ?? "pif35"
+        )
+      )
+    : createPlaceholderMeasure();
   const ownerEmail = textValue(getPath(source, "deal.owner_id.email"));
   const advisor = advisors.find((item) => item.email.toLowerCase() === ownerEmail.toLowerCase()) ?? advisors[0];
   const proposal = createGuidedProposal(dealId);
   const proposalId = generateProposalId(dealId);
 
-  return {
+  return sanitizeProposalCopy({
     ...proposal,
     id: proposalId,
     quoteNumber: proposalId,
@@ -214,12 +221,24 @@ export async function mapPipedriveBundleToProposal(dealId: string, bundle: Await
     },
     situation: {
       ...proposal.situation,
-      isolationTargets: isolationLabelForType(measureType),
+      isolationTargets: maatregelRaw.trim() ? isolationLabelForType(measureType) : "Nog te bepalen",
       summary:
-        "Naar aanleiding van de inspectie lichten wij de gekozen isolatiemaatregel en bijbehorende investering toe."
+        "Naar aanleiding van uw interesse in het verduurzamen van uw woning ontvangt u hierbij onze op maat gemaakte offerte."
     },
     measures: [measure]
-  };
+  });
+}
+
+export async function moveDealToStage(dealId: string, stageId: string) {
+  const response = await fetch(`${pipedriveBaseUrl}/deals/${dealId}?api_token=${token()}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ stage_id: Number(stageId) })
+  });
+  if (!response.ok) {
+    throw new Error(`Pipedrive deal-fase bijwerken mislukt: ${response.status}`);
+  }
+  return response.json();
 }
 
 export async function fetchPipedriveCustomer(dealId: string): Promise<Customer> {

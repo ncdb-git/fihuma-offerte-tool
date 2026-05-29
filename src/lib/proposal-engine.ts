@@ -1,3 +1,4 @@
+import { generateProposalId } from "@/lib/proposal-store-ids";
 import { Advisor, Customer, IsdeSubsidyStatus, Measure, MoneyLine, Proposal } from "@/lib/types";
 
 export const OFFER_VALID_DAYS = 14;
@@ -579,6 +580,7 @@ export const MEASURE_TYPE_LABELS: Record<Measure["type"], string> = {
 
 export function formatCustomerSalutation(customer: Customer): string {
   const name = customer.name.trim();
+  if (!name) return "Klant";
   if (customer.salutation === "familie") return name.startsWith("Familie") ? name : `Familie ${name}`;
   if (customer.salutation === "dhr.") return `Dhr. ${name}`;
   if (customer.salutation === "mevr.") return `Mevr. ${name}`;
@@ -685,21 +687,133 @@ export function createDemoProposal(dealId = "1234"): Proposal {
   };
 }
 
+export const MEASURE_DRAFT_PRODUCT = "Nog te kiezen";
+
+export const PIPEDRIVE_AUTO_CREATE_NOTICE =
+  "Dit offerteconcept is automatisch aangemaakt vanuit Pipedrive. Controleer de gegevens en vul de offerte waar nodig aan.";
+
+export function stripPipedriveBoilerplate(text: string) {
+  return text.replace(PIPEDRIVE_AUTO_CREATE_NOTICE, "").replace(/\s{2,}/g, " ").trim();
+}
+
+export function sanitizeProposalCopy(proposal: Proposal): Proposal {
+  const scrub = (value: string) => stripPipedriveBoilerplate(value);
+  return {
+    ...proposal,
+    introText: scrub(proposal.introText),
+    workflowIntro: scrub(proposal.workflowIntro),
+    notes: scrub(proposal.notes),
+    situation: {
+      ...proposal.situation,
+      summary: scrub(proposal.situation.summary),
+      inspection: scrub(proposal.situation.inspection),
+      homeInfo: scrub(proposal.situation.homeInfo)
+    }
+  };
+}
+
+export function isMeasureDraft(measure: Measure) {
+  return measure.productName === MEASURE_DRAFT_PRODUCT;
+}
+
+/** Placeholder totdat de adviseur een maatregel kiest — preview blijft generiek. */
+export function createPlaceholderMeasure(): Measure {
+  return finalizeMeasureForStore({
+    id: `draft-${Date.now()}`,
+    type: "vloer",
+    title: "Isolatiemaatregel",
+    productName: MEASURE_DRAFT_PRODUCT,
+    application: "",
+    squareMeters: 0,
+    description: "",
+    rcValue: "",
+    warranty: "",
+    lifespan: "",
+    benefits: [],
+    specifications: [],
+    workDescription: "",
+    extraWork: [],
+    adjustments: [],
+    subsidies: [],
+    subsidyStatus: "single",
+    grossInvestment: 0,
+    netInvestment: 0
+  });
+}
+
+/** Handmatige offerte: lege NAW, generieke preview, geen Pipedrive-koppeling. */
+export function createBlankManualProposal(): Proposal {
+  const proposalId = generateProposalId("manual");
+  return sanitizeProposalCopy({
+    id: proposalId,
+    quoteNumber: proposalId,
+    status: "In bewerking",
+    label: "Fihuma Collectief",
+    title: "Offerte isolatiemaatregelen",
+    subtitle: "Sinds 1994 uw betrouwbare partner in isolatieoplossingen.",
+    createdAt: new Date().toISOString(),
+    coverSfeerImageSrc: null,
+    advisor: advisors.find((a) => a.active) ?? advisors[0],
+    customer: {
+      salutation: "familie",
+      name: "",
+      address: "",
+      postalCode: "",
+      city: "",
+      email: "",
+      phone: "",
+      pipedriveDealId: "",
+      pipedriveDealLink: ""
+    },
+    situation: {
+      inspection: "",
+      homeInfo: "",
+      summary:
+        "Naar aanleiding van uw interesse in het verduurzamen van uw woning ontvangt u hierbij onze op maat gemaakte offerte.",
+      buildingType: "",
+      buildYear: "",
+      isolationTargets: "Nog te bepalen",
+      inspectionDate: new Date().toISOString()
+    },
+    introText:
+      "Op basis van de inspectie adviseren wij onderstaande maatregelen. De offerte is modulair opgebouwd: per maatregel ziet u het product, de werkzaamheden, de investering en de indicatieve subsidies.",
+    workflowIntro:
+      "Wij leveren en plaatsen isolatiemaatregelen die passen bij de technische situatie van uw woning.",
+    whyFihuma: [
+      "Ervaren isolatiespecialisten met duidelijke opname en uitvoering.",
+      "Heldere subsidie-indicatie en transparante netto investering.",
+      "Netjes werk, vaste aanspreekpunten en professionele oplevering.",
+      "Oplossingen die technisch passen bij de woning, niet bij een standaardmal."
+    ],
+    clauses: [],
+    notes: "Planning gaat in goed overleg met u. Uitvoering is vaak een dagdeel per maatregel.",
+    agreement: {
+      paymentTerms: PAYMENT_TERM_OPTIONS[1].text,
+      subsidyClause: SUBSIDY_CLAUSE_OPTIONS[0].text,
+      nextSteps:
+        "Na uw akkoord stemmen wij de planning met u af en ontvangt u een opdrachtbevestiging met de definitieve afspraken.",
+      termsReference:
+        "Op deze offerte en de uitvoering zijn onze algemene voorwaarden van toepassing.",
+      approvalMethod: "digital",
+      priorApprovalDate: null
+    },
+    measures: [createPlaceholderMeasure()]
+  });
+}
+
 /** Eén maatregel, leeg preset — past bij MVP: één offerte = één maatregeltype. */
 export function createGuidedProposal(dealId = "1234"): Proposal {
   const base = createDemoProposal(dealId);
-  const first = MAIN_PRODUCTS.vloer[0].key;
-  const m0 = applyProductToMeasure(createBlankMeasure("vloer"), first);
-  return {
+  return sanitizeProposalCopy({
     ...base,
-    measures: [m0],
+    measures: [createPlaceholderMeasure()],
     situation: {
       ...base.situation,
-      isolationTargets: isolationLabelForType("vloer"),
+      isolationTargets: "Nog te bepalen",
       summary:
-        "Naar aanleiding van de inspectie lichten wij de gekozen isolatiemaatregel en bijbehorende investering toe."
+        "Naar aanleiding van uw interesse in het verduurzamen van uw woning ontvangt u hierbij onze op maat gemaakte offerte."
     }
-  };
+  });
 }
 
 export const demoProposals: Proposal[] = [

@@ -2,9 +2,11 @@ import {
   calculateIsdeSubsidy,
   formatCustomerSalutation,
   formatLetterGreeting,
+  isMeasureDraft,
   measureAdjustmentsTotal,
   measureBrutoTotal,
   measureExtraWorkTotal,
+  measureHasPricing,
   money,
   OFFER_VALID_DAYS,
   PAYMENT_TERM_OPTIONS,
@@ -177,12 +179,12 @@ function MeasureHero({ measure }: { measure: Measure }) {
   );
 }
 
-function CoverPage({ proposal }: { proposal: Proposal }) {
+function CoverPage({ proposal, draft = false }: { proposal: Proposal; draft?: boolean }) {
   const measure = proposal.measures[0];
   const quoteNr = proposal.quoteNumber?.trim() || proposal.id;
-  const coverTitle = measure?.title ? `Offerte ${measure.title}` : "Offerte";
-  const coverHeroSrc = proposal.coverSfeerImageSrc || coverHeroForMeasure(measure);
-  const coverSubtitle = coverSubtitleForMeasure(measure);
+  const coverTitle = draft ? "Offerte isolatie" : measure?.title ? `Offerte ${measure.title}` : "Offerte";
+  const coverHeroSrc = draft ? null : proposal.coverSfeerImageSrc || coverHeroForMeasure(measure);
+  const coverSubtitle = draft ? "Comfortabeler wonen met minder warmteverlies" : coverSubtitleForMeasure(measure);
 
   return (
     <section className="proposal-page cover-page">
@@ -259,9 +261,12 @@ function CoverPage({ proposal }: { proposal: Proposal }) {
   );
 }
 
-function OverviewPage({ proposal }: { proposal: Proposal }) {
+function OverviewPage({ proposal, draft = false }: { proposal: Proposal; draft?: boolean }) {
   const customer = proposal.customer;
-  const addr = `${customer.address}, ${customer.postalCode} ${customer.city}`;
+  const hasAddress = Boolean(customer.address?.trim() || customer.city?.trim());
+  const addr = hasAddress ? `${customer.address}, ${customer.postalCode} ${customer.city}`.replace(/^,\s*|,\s*$/g, "").trim() : "Nog in te vullen";
+  const greeting = customer.name?.trim() ? formatLetterGreeting(customer) : "heer/mevrouw";
+
   return (
     <ProposalPageShell className="overview-page">
       <p className="eyebrow">Uw voorstel</p>
@@ -269,11 +274,13 @@ function OverviewPage({ proposal }: { proposal: Proposal }) {
 
       <div className="overview-flow">
         <div className="overview-flow__intro">
-          <p className="prose-lead">Beste {formatLetterGreeting(customer)},</p>
+          <p className="prose-lead">Beste {greeting},</p>
           <p>
-            Naar aanleiding van uw interesse in het verduurzamen van uw woning ontvangt u hierbij onze op maat gemaakte offerte. Op basis van de opname hebben wij gekeken naar de huidige situatie, bereikbaarheid, ventilatie en mogelijkheden om uw woning comfortabeler en energiezuiniger te maken.
+            {draft
+              ? "Naar aanleiding van uw interesse in het verduurzamen van uw woning ontvangt u hierbij onze op maat gemaakte offerte. In de volgende pagina's lichten wij de gekozen isolatiemaatregel, het product en de investering toe."
+              : "Naar aanleiding van uw interesse in het verduurzamen van uw woning ontvangt u hierbij onze op maat gemaakte offerte. Op basis van de opname hebben wij gekeken naar de huidige situatie, bereikbaarheid, ventilatie en mogelijkheden om uw woning comfortabeler en energiezuiniger te maken."}
           </p>
-          <p>{proposal.situation.summary}</p>
+          {proposal.situation.summary ? <p>{proposal.situation.summary}</p> : null}
           <article className="home-summary-card">
             <h3 className="home-summary-card__title">Uw woning in het kort</h3>
             <dl className="spec-dl">
@@ -283,7 +290,7 @@ function OverviewPage({ proposal }: { proposal: Proposal }) {
               </div>
               <div className="spec-dl__row">
                 <dt>Te isoleren onderdelen</dt>
-                <dd>{proposal.situation.isolationTargets}</dd>
+                <dd>{proposal.situation.isolationTargets || "Nog te bepalen"}</dd>
               </div>
               <div className="spec-dl__row">
                 <dt>Inspectie door</dt>
@@ -465,11 +472,11 @@ function InvestmentPage({ proposal, measure }: { proposal: Proposal; measure: Me
   );
 }
 
-function AgreementPage({ proposal }: { proposal: Proposal }) {
+function AgreementPage({ proposal, draft = false }: { proposal: Proposal; draft?: boolean }) {
   const validUntil = offerValidUntilLabel(proposal.createdAt);
   const priorForm = proposal.agreement.approvalMethod === "prior-form";
   const measure = proposal.measures[0];
-  const isde = measure ? calculateIsdeSubsidy(measure) : null;
+  const isde = measure && !draft ? calculateIsdeSubsidy(measure) : null;
 
   return (
     <ProposalPageShell className="agreement-page">
@@ -501,12 +508,16 @@ function AgreementPage({ proposal }: { proposal: Proposal }) {
         <div className="agreement-card-grid agreement-card-grid--four">
           <article className="text-panel agreement-full">
             <h3>Meldcode</h3>
-            {proposal.measures.map((m) => (
-              <p key={m.id}>
-                Voor {m.productName} ({m.title.toLowerCase()}) is de meldcode m.b.t. de ISDE subsidie{" "}
-                <strong>{meldcodeForMeasure(m)}</strong>.
-              </p>
-            ))}
+            {draft ? (
+              <p>De meldcode voor ISDE wordt opgenomen zodra de maatregel en het product definitief zijn gekozen.</p>
+            ) : (
+              proposal.measures.map((m) => (
+                <p key={m.id}>
+                  Voor {m.productName} ({m.title.toLowerCase()}) is de meldcode m.b.t. de ISDE subsidie{" "}
+                  <strong>{meldcodeForMeasure(m)}</strong>.
+                </p>
+              ))
+            )}
           </article>
           <article className="text-panel agreement-full">
             <h3>ISDE subsidie</h3>
@@ -585,20 +596,23 @@ function AgreementPage({ proposal }: { proposal: Proposal }) {
 }
 
 export function ProposalDocument({ proposal }: { proposal: Proposal }) {
+  const configuredMeasures = proposal.measures.filter((measure) => !isMeasureDraft(measure));
+  const draft = configuredMeasures.length === 0;
+
   return (
     <main className="proposal-document">
-      <CoverPage proposal={proposal} />
-      <OverviewPage proposal={proposal} />
+      <CoverPage draft={draft} proposal={proposal} />
+      <OverviewPage draft={draft} proposal={proposal} />
       <WhyFihumaPage />
-      {proposal.measures.map((measure) => (
+      {configuredMeasures.map((measure) => (
         <Fragment key={measure.id}>
           <ProposalPageShell>
             <MeasureBlock measure={measure} />
           </ProposalPageShell>
-          <InvestmentPage proposal={proposal} measure={measure} />
+          {measureHasPricing(measure) ? <InvestmentPage measure={measure} proposal={proposal} /> : null}
         </Fragment>
       ))}
-      <AgreementPage proposal={proposal} />
+      <AgreementPage draft={draft} proposal={proposal} />
     </main>
   );
 }

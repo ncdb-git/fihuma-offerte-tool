@@ -3,7 +3,7 @@
 import { Archive, Copy, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { money, proposalDashboardNetTotal, proposalDisplayTitle } from "@/lib/proposal-engine";
+import { advisors, money, proposalDashboardNetTotal, proposalDisplayTitle } from "@/lib/proposal-engine";
 import { normalizeProposalStatus } from "@/lib/proposal-status";
 import { isPipedriveDealId } from "@/lib/proposal-store-ids";
 import { Proposal } from "@/lib/types";
@@ -33,6 +33,9 @@ export function DashboardClient() {
   const [storageMode, setStorageMode] = useState("");
   const [persistenceWarning, setPersistenceWarning] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [advisorFilter, setAdvisorFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("active");
 
   async function loadProposals() {
     setIsLoading(true);
@@ -64,6 +67,31 @@ export function DashboardClient() {
       })),
     [records]
   );
+
+  const filteredRows = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return rows.filter((record) => {
+      const { proposal, status } = record;
+      const customer = proposal.customer;
+
+      if (query) {
+        const haystack = [customer.name, customer.address, customer.city, customer.postalCode, proposal.id, record.title]
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+
+      if (advisorFilter !== "all" && proposal.advisor.id !== advisorFilter) return false;
+
+      if (statusFilter === "active") {
+        if (status === "Gearchiveerd") return false;
+      } else if (statusFilter !== "all" && status !== statusFilter) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [rows, searchQuery, advisorFilter, statusFilter]);
 
   async function archiveProposal(id: string) {
     setBusyId(id);
@@ -129,13 +157,37 @@ export function DashboardClient() {
       <div className="mb-5 grid grid-cols-[1fr_170px_170px_120px] gap-3">
         <label className="flex items-center gap-2 rounded-lg border border-fihuma-line bg-white px-3">
           <Search size={18} />
-          <input className="h-11 w-full outline-none" placeholder="Zoeken op naam, straat of woonplaats" />
+          <input
+            className="h-11 w-full outline-none"
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Zoeken op naam, straat of woonplaats"
+            value={searchQuery}
+          />
         </label>
-        <select className="rounded-lg border border-fihuma-line bg-white px-3">
-          <option>Alle adviseurs</option>
+        <select
+          className="rounded-lg border border-fihuma-line bg-white px-3"
+          onChange={(event) => setAdvisorFilter(event.target.value)}
+          value={advisorFilter}
+        >
+          <option value="all">Alle adviseurs</option>
+          {advisors.map((advisor) => (
+            <option key={advisor.id} value={advisor.id}>
+              {advisor.name}
+            </option>
+          ))}
         </select>
-        <select className="rounded-lg border border-fihuma-line bg-white px-3">
-          <option>Actieve concepten</option>
+        <select
+          className="rounded-lg border border-fihuma-line bg-white px-3"
+          onChange={(event) => setStatusFilter(event.target.value)}
+          value={statusFilter}
+        >
+          <option value="active">Actieve concepten</option>
+          <option value="all">Alle statussen</option>
+          <option value="Nieuw vanuit Pipedrive">Nieuw vanuit Pipedrive</option>
+          <option value="In bewerking">In bewerking</option>
+          <option value="Offerte gegenereerd">Offerte gegenereerd</option>
+          <option value="Geüpload naar Pipedrive">Geüpload naar Pipedrive</option>
+          <option value="Gearchiveerd">Gearchiveerd</option>
         </select>
         <button className="flex items-center justify-center gap-2 rounded-lg border border-fihuma-line bg-white font-bold" type="button">
           <SlidersHorizontal size={18} /> Filters
@@ -157,11 +209,16 @@ export function DashboardClient() {
 
         {!isLoading && records.length > 0 ? (
           <p className="border-b border-fihuma-line bg-[#fbfcfa] px-5 py-2 text-xs text-[#64736b]">
-            {records.length} concept{records.length === 1 ? "" : "en"} · opslag: {storageMode === "supabase" ? "Supabase" : "lokaal bestand"}
+            {filteredRows.length} van {records.length} concept{records.length === 1 ? "" : "en"} · opslag:{" "}
+            {storageMode === "supabase" ? "Supabase" : "lokaal bestand"}
           </p>
         ) : null}
 
-        {rows.map((record) => {
+        {!isLoading && records.length > 0 && filteredRows.length === 0 ? (
+          <div className="px-5 py-8 text-sm text-[#64736b]">Geen concepten gevonden met deze filters.</div>
+        ) : null}
+
+        {filteredRows.map((record) => {
           const { proposal, netTotal, status, title } = record;
           const href = proposalHref(proposal);
           const disabled = busyId === proposal.id;

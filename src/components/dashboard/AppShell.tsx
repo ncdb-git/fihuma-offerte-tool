@@ -22,7 +22,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-fihuma-mint" href="/dashboard">
             <LayoutDashboard size={18} /> Dashboard
           </Link>
-          <Link className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-fihuma-mint" href="/create?deal_id=1248">
+          <Link className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-fihuma-mint" href="/create?manual=1">
             <FileText size={18} /> Offerte maken
           </Link>
           <Link className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-fihuma-mint" href="/admin/advisors">
