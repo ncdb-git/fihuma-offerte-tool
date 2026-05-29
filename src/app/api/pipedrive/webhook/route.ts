@@ -123,7 +123,7 @@ export async function POST(request: Request) {
         stageMatch: false
       });
       return NextResponse.json({
-        ok: false,
+        ok: true,
         reason: "stage_mismatch",
         dealId,
         receivedStageId,

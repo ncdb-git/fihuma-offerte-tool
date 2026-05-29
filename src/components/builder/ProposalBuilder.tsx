@@ -102,6 +102,7 @@ export function ProposalBuilder({
   const [pipedriveUploadState, setPipedriveUploadState] = useState<PipedriveUploadState>("idle");
   const [pipedriveUploadMessage, setPipedriveUploadMessage] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const [creatingSibling, setCreatingSibling] = useState(false);
 
   const measure = proposal.measures[0];
   const total = useMemo(() => proposal.measures.reduce((sum, m) => sum + m.netInvestment, 0), [proposal.measures]);
@@ -115,6 +116,21 @@ export function ProposalBuilder({
     if (!measure) return;
     setProductKey(getProductKeyForMeasure(measure));
   }, [measure?.id, measure?.type, measure?.productName]);
+
+  useEffect(() => {
+    if (!dealId || !isPipedriveDealId(dealId)) return;
+    setProposal((prev) => {
+      if (prev.customer.pipedriveDealId === dealId) return prev;
+      return {
+        ...prev,
+        customer: {
+          ...prev.customer,
+          pipedriveDealId: dealId,
+          pipedriveDealLink: prev.customer.pipedriveDealLink || `https://app.pipedrive.com/deal/${dealId}`
+        }
+      };
+    });
+  }, [dealId]);
 
   const syncFinancials = useCallback((m: Measure, mod: BuilderModules, nipE: number) => {
     return rebuildMeasure(m, { modules: mod, nip: nipE });
@@ -247,9 +263,9 @@ export function ProposalBuilder({
 
   async function uploadToPipedrive() {
     const current = proposalRef.current;
-    const dealId = current.customer.pipedriveDealId?.trim() ?? "";
+    const linkedDealId = (current.customer.pipedriveDealId?.trim() || dealId?.trim()) ?? "";
 
-    if (!isPipedriveDealId(dealId)) {
+    if (!isPipedriveDealId(linkedDealId)) {
       setPipedriveUploadState("error");
       setPipedriveUploadMessage("Geen Pipedrive-deal gekoppeld. Open deze offerte via het dashboard vanuit een deal.");
       console.error("[builder] pipedrive upload geblokkeerd: geen deal_id", {
@@ -268,7 +284,10 @@ export function ProposalBuilder({
       const response = await fetch("/api/pipedrive/upload-pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(current)
+        body: JSON.stringify({
+          ...current,
+          customer: { ...current.customer, pipedriveDealId: linkedDealId }
+        })
       });
 
       const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; message?: string };
@@ -295,8 +314,35 @@ export function ProposalBuilder({
   }
 
   async function backToDashboard() {
-    await saveConcept("advisor");
+    try {
+      await saveConcept("advisor");
+    } catch (error) {
+      console.error("[builder] opslaan vóór dashboard mislukt", error);
+    }
     router.push("/dashboard");
+  }
+
+  async function createSiblingProposal() {
+    if (!dealId) return;
+    setCreatingSibling(true);
+    setFieldError(null);
+    try {
+      const response = await fetch("/api/proposals/for-deal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dealId })
+      });
+      const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; proposal?: Proposal };
+      if (!response.ok || !payload.ok || !payload.proposal) {
+        throw new Error(payload.error ?? "Nieuwe offerte aanmaken mislukt.");
+      }
+      router.push(`/create?deal_id=${dealId}&proposal_id=${encodeURIComponent(payload.proposal.id)}`);
+      router.refresh();
+    } catch (error) {
+      setFieldError(error instanceof Error ? error.message : "Nieuwe offerte aanmaken mislukt.");
+    } finally {
+      setCreatingSibling(false);
+    }
   }
 
   if (!measure) {
@@ -408,12 +454,14 @@ export function ProposalBuilder({
                 <section className="rounded-xl border border-fihuma-line bg-[#fbfcfa] p-3">
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <p className="text-xs font-black uppercase tracking-wide text-fihuma-green">Conceptoffertes</p>
-                    <a
-                      className="rounded-lg border border-fihuma-green bg-white px-2 py-1 text-[11px] font-bold text-fihuma-green"
-                      href={`/create?deal_id=${dealId}&new=1`}
+                    <button
+                      className="rounded-lg border border-fihuma-green bg-white px-2 py-1 text-[11px] font-bold text-fihuma-green disabled:opacity-60"
+                      disabled={creatingSibling}
+                      onClick={() => void createSiblingProposal()}
+                      type="button"
                     >
-                      Nieuwe offerte
-                    </a>
+                      {creatingSibling ? "Bezig…" : "Nieuwe offerte"}
+                    </button>
                   </div>
                   {siblingProposals.length === 0 ? (
                     <p className="text-xs text-[#64736b]">Nog geen andere concepten voor deze klant.</p>

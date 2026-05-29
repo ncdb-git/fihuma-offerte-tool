@@ -180,7 +180,11 @@ export async function findProposalRowByLookupId(client: SupabaseClient, lookupId
     .select("id, created_at, pipedrive_deal_id, proposal_id")
     .eq("proposal_id", lookupId)
     .maybeSingle();
-  if (byProposalId.data) return byProposalId;
+  if (byProposalId.data || byProposalId.error) return byProposalId;
 
-  return client.from(PROPOSALS_TABLE).select("id, created_at, pipedrive_deal_id, proposal_id").eq("pipedrive_deal_id", lookupId).maybeSingle();
+  if (/^\d+$/.test(lookupId)) {
+    return client.from(PROPOSALS_TABLE).select("id, created_at, pipedrive_deal_id, proposal_id").eq("pipedrive_deal_id", lookupId).maybeSingle();
+  }
+
+  return { data: null, error: null };
 }

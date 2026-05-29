@@ -1,9 +1,9 @@
 "use client";
 
-import { Archive, Copy, FileDown, Search, SlidersHorizontal, Trash2, UploadCloud } from "lucide-react";
+import { Archive, Copy, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { formatProposalPdfFilename, money, proposalDisplayTitle } from "@/lib/proposal-engine";
+import { money, proposalDashboardNetTotal, proposalDisplayTitle } from "@/lib/proposal-engine";
 import { normalizeProposalStatus } from "@/lib/proposal-status";
 import { isPipedriveDealId } from "@/lib/proposal-store-ids";
 import { Proposal } from "@/lib/types";
@@ -59,7 +59,7 @@ export function DashboardClient() {
       records.map((record) => ({
         ...record,
         title: proposalDisplayTitle(record.proposal),
-        netTotal: record.proposal.measures.reduce((sum, measure) => sum + measure.netInvestment, 0),
+        netTotal: proposalDashboardNetTotal(record.proposal),
         status: normalizeProposalStatus(record.proposal.status)
       })),
     [records]
@@ -111,49 +111,6 @@ export function DashboardClient() {
     const payload = await response.json();
     await loadProposals();
     if (payload.proposal) router.push(proposalHref(payload.proposal as Proposal));
-  }
-
-  async function downloadPdf(record: ProposalRecord) {
-    setBusyId(record.proposal.id);
-    const response = await fetch(`/api/proposals/${encodeURIComponent(record.proposal.id)}/pdf`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(record.proposal)
-    });
-    setBusyId(null);
-    if (!response.ok) {
-      setError("PDF download mislukt.");
-      return;
-    }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = formatProposalPdfFilename(record.proposal);
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-  }
-
-  async function uploadToPipedrive(record: ProposalRecord) {
-    if (!isPipedriveDealId(record.proposal.customer.pipedriveDealId)) {
-      setError("Geen Pipedrive-deal gekoppeld.");
-      return;
-    }
-    setBusyId(record.proposal.id);
-    const response = await fetch("/api/pipedrive/upload-pdf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(record.proposal)
-    });
-    setBusyId(null);
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || payload.ok === false) {
-      setError(payload.error ?? "Upload naar Pipedrive mislukt.");
-      return;
-    }
-    await loadProposals();
   }
 
   return (
@@ -210,8 +167,17 @@ export function DashboardClient() {
           const disabled = busyId === proposal.id;
           return (
             <div
-              className="grid grid-cols-[1fr_1fr_120px_110px_110px_1.4fr] items-center border-b border-fihuma-line px-5 py-4 text-[#17221d] last:border-0"
+              className="grid cursor-pointer grid-cols-[1fr_1fr_120px_110px_110px_1.4fr] items-center border-b border-fihuma-line px-5 py-4 text-[#17221d] transition hover:bg-[#f7faf6] last:border-0"
               key={proposal.id}
+              onClick={() => router.push(href)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  router.push(href);
+                }
+              }}
+              role="link"
+              tabIndex={0}
             >
               <div>
                 <p className="font-black">{proposal.customer.name}</p>
@@ -223,8 +189,8 @@ export function DashboardClient() {
               </div>
               <span className="w-fit rounded-full bg-fihuma-mint px-3 py-1 text-xs font-black text-fihuma-green">{status}</span>
               <span className="text-xs font-bold text-[#64736b]">{nlDate(record.createdAt)}</span>
-              <strong>{netTotal > 0 ? money(netTotal) : "—"}</strong>
-              <div className="flex flex-wrap gap-1.5">
+              <strong>{netTotal !== null ? money(netTotal) : "—"}</strong>
+              <div className="flex flex-wrap gap-1.5" onClick={(event) => event.stopPropagation()}>
                 <button
                   className="rounded-md border border-fihuma-line bg-white px-2 py-1.5 text-[11px] font-black"
                   disabled={disabled}
@@ -236,7 +202,10 @@ export function DashboardClient() {
                 <button
                   className="rounded-md border border-fihuma-line bg-white p-1.5"
                   disabled={disabled}
-                  onClick={() => duplicateProposal(record)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void duplicateProposal(record);
+                  }}
                   title="Dupliceren"
                   type="button"
                 >
@@ -245,25 +214,10 @@ export function DashboardClient() {
                 <button
                   className="rounded-md border border-fihuma-line bg-white p-1.5"
                   disabled={disabled}
-                  onClick={() => downloadPdf(record)}
-                  title="PDF"
-                  type="button"
-                >
-                  <FileDown size={15} />
-                </button>
-                <button
-                  className="rounded-md border border-fihuma-line bg-white p-1.5"
-                  disabled={disabled}
-                  onClick={() => uploadToPipedrive(record)}
-                  title="Pipedrive"
-                  type="button"
-                >
-                  <UploadCloud size={15} />
-                </button>
-                <button
-                  className="rounded-md border border-fihuma-line bg-white p-1.5"
-                  disabled={disabled}
-                  onClick={() => archiveProposal(proposal.id)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void archiveProposal(proposal.id);
+                  }}
                   title="Archiveren"
                   type="button"
                 >
@@ -272,7 +226,10 @@ export function DashboardClient() {
                 <button
                   className="rounded-md border border-red-200 bg-red-50 p-1.5 text-red-700"
                   disabled={disabled}
-                  onClick={() => deleteProposal(proposal.id)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void deleteProposal(proposal.id);
+                  }}
                   title="Verwijderen"
                   type="button"
                 >

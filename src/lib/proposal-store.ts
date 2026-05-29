@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { isArchivedStatus, normalizeProposalStatus } from "@/lib/proposal-status";
 import { generateProposalId, isPipedriveDealId, storageKeyForProposal } from "@/lib/proposal-store-ids";
-import { normalizeMeasure } from "@/lib/proposal-engine";
+import { finalizeProposalForStore, normalizeMeasure, stripLegacyDemoPricingFromProposal } from "@/lib/proposal-engine";
 import type { ProposalRecord, UpsertProposalResult, UpsertSource, UpsertStorageResult } from "@/lib/proposal-store-types";
 import { Proposal, ProposalStatus } from "@/lib/types";
 import {
@@ -165,7 +165,7 @@ function isPipedriveRecord(proposal: Proposal) {
 
 function proposalFromRow(proposalData: unknown): Proposal | null {
   if (!proposalData || typeof proposalData !== "object") return null;
-  const proposal = proposalData as Proposal;
+  const proposal = stripLegacyDemoPricingFromProposal(proposalData as Proposal);
   return {
     ...proposal,
     status: normalizeProposalStatus(proposal.status),
@@ -213,6 +213,12 @@ async function upsertSupabaseProposal(proposal: Proposal, source: UpsertSource, 
 
   if (upsertError) {
     logSupabaseError(upsertError, payloadRecord);
+    const code = (upsertError as { code?: string }).code;
+    if (code === "23505" && isPipedriveDealId(dealId ?? "")) {
+      throw new Error(
+        "Er bestaat al een offerte voor deze deal in de database. Voer de Supabase-migratie supabase/migrations/20250520120000_proposals_multi_per_deal.sql uit om meerdere concepten per klant toe te staan."
+      );
+    }
     throw upsertError;
   }
 
@@ -303,10 +309,10 @@ export async function upsertProposalConcept(proposal: Proposal, source: UpsertSo
   const storageKey = storageKeyForProposal(proposal);
   const existingConcept = await getProposalConceptById(proposal.id);
 
-  let nextProposal = {
+  let nextProposal = finalizeProposalForStore({
     ...proposal,
     measures: proposal.measures.map(normalizeMeasure)
-  };
+  });
 
   if (source === "webhook" && existingConcept && shouldPreserveWorkflow(existingConcept.status)) {
     nextProposal = mergePipedriveRefresh(existingConcept, nextProposal);

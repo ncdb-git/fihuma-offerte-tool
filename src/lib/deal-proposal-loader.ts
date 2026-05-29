@@ -52,13 +52,14 @@ export async function createNewProposalForDeal(dealId: string): Promise<Proposal
     }
   }
 
+  const guided = createGuidedProposal(dealId);
   const fallback = {
-    ...createGuidedProposal(dealId),
+    ...guided,
     id: generateProposalId(dealId),
     customer: {
-      ...createGuidedProposal(dealId).customer,
+      ...guided.customer,
       pipedriveDealId: dealId,
-      pipedriveDealLink: `https://app.pipedrive.com/deal/${dealId}`
+      pipedriveDealLink: `https://${process.env.PIPEDRIVE_COMPANY_DOMAIN || "app"}.pipedrive.com/deal/${dealId}`
     }
   };
   const result = await upsertProposalConcept(fallback, "advisor");

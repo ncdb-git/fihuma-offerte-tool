@@ -1,9 +1,9 @@
 import {
   advisors,
-  applyAutomaticIsdeSubsidy,
   applyProductToMeasure,
   createGuidedProposal,
   createBlankMeasure,
+  finalizeMeasureForStore,
   ISDE_SUBSIDY_STATUS_OPTIONS,
   isolationLabelForType,
   MAIN_PRODUCTS
@@ -184,11 +184,12 @@ export async function mapPipedriveBundleToProposal(dealId: string, bundle: Await
   });
 
   const measureType = measureTypeFromPipedrive(textValue(getPath(source, fields.maatregel)));
-  const squareMeters = Number(textValue(getPath(source, fields.oppervlakte))) || createBlankMeasure(measureType).squareMeters;
+  const squareMeters = Number(textValue(getPath(source, fields.oppervlakte))) || 0;
   const subsidyStatus = subsidyStatusFromPipedrive(textValue(getPath(source, fields.subsidieOptie)));
   const firstProduct = MAIN_PRODUCTS[measureType][0]?.key ?? "pif35";
   const baseMeasure = createBlankMeasure(measureType);
-  const measure = applyAutomaticIsdeSubsidy(applyProductToMeasure({ ...baseMeasure, squareMeters, subsidyStatus }, firstProduct));
+  const withProduct = applyProductToMeasure({ ...baseMeasure, squareMeters, subsidyStatus }, firstProduct);
+  const measure = finalizeMeasureForStore(withProduct);
   const ownerEmail = textValue(getPath(source, "deal.owner_id.email"));
   const advisor = advisors.find((item) => item.email.toLowerCase() === ownerEmail.toLowerCase()) ?? advisors[0];
   const proposal = createGuidedProposal(dealId);
@@ -242,9 +243,14 @@ export async function fetchPipedriveCustomer(dealId: string): Promise<Customer> 
 }
 
 export async function uploadProposalPdf(proposal: Proposal, pdf: Blob, filename?: string) {
+  const dealId = proposal.customer.pipedriveDealId?.trim() ?? "";
+  if (!/^\d+$/.test(dealId)) {
+    throw new Error(`Ongeldige Pipedrive deal_id "${dealId}". Open de offerte via een gekoppelde deal.`);
+  }
+
   const form = new FormData();
   form.append("file", pdf, filename ?? `${proposal.id}-offerte.pdf`);
-  form.append("deal_id", proposal.customer.pipedriveDealId);
+  form.append("deal_id", dealId);
 
   const response = await fetch(`${pipedriveBaseUrl}/files?api_token=${token()}`, {
     method: "POST",

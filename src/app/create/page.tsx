@@ -17,20 +17,38 @@ export default async function CreateProposalPage({
   const createNew = searchParams.new === "1";
 
   if (dealId) {
-    const { proposal, siblings } = await ensureProposalForDeal(dealId, { proposalId, createNew });
-    console.info("[create] configurator openen", {
-      storageMode: proposalStorageMode(),
-      dealId,
-      proposalId: proposal.id,
-      siblingCount: siblings.length,
-      createNew
-    });
+    try {
+      const { proposal, siblings } = await ensureProposalForDeal(dealId, { proposalId, createNew });
+      console.info("[create] configurator openen", {
+        storageMode: proposalStorageMode(),
+        dealId,
+        proposalId: proposal.id,
+        siblingCount: siblings.length,
+        createNew
+      });
 
-    return (
-      <AuthGate>
-        <ProposalBuilder dealId={dealId} initialProposal={proposal} siblingProposals={siblings} />
-      </AuthGate>
-    );
+      return (
+        <AuthGate>
+          <ProposalBuilder dealId={dealId} initialProposal={proposal} siblingProposals={siblings} />
+        </AuthGate>
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Configurator laden mislukt.";
+      console.error("[create] configurator fout", { dealId, createNew, error });
+      return (
+        <AuthGate>
+          <main className="flex min-h-screen items-center justify-center bg-[#f7f8f5] px-6">
+            <div className="max-w-lg rounded-xl border border-red-200 bg-white p-6 shadow-panel">
+              <h1 className="text-lg font-black text-red-800">Offerte openen mislukt</h1>
+              <p className="mt-2 text-sm text-[#4a5751]">{message}</p>
+              <a className="mt-4 inline-block text-sm font-bold text-fihuma-green underline" href="/dashboard">
+                Terug naar werkvoorraad
+              </a>
+            </div>
+          </main>
+        </AuthGate>
+      );
+    }
   }
 
   const storedProposal = await getProposalConceptById(manualId);

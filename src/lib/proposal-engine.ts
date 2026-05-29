@@ -318,6 +318,56 @@ export function normalizeMeasure(measure: Measure): Measure {
   };
 }
 
+export function measureHasPricing(measure: Measure) {
+  return measure.grossInvestment > 0 || measureExtraWorkTotal(measure) > 0 || measureAdjustmentsTotal(measure) > 0;
+}
+
+/** Zonder ingevulde prijs geen demo-subsidies of netto op dashboard/PDF. */
+export function finalizeMeasureForStore(measure: Measure): Measure {
+  const normalized = normalizeMeasure(measure);
+  if (!measureHasPricing(normalized)) {
+    return { ...normalized, subsidies: [], netInvestment: 0 };
+  }
+  return applyAutomaticIsdeSubsidy(normalized);
+}
+
+export function finalizeProposalForStore(proposal: Proposal): Proposal {
+  return {
+    ...proposal,
+    measures: (proposal.measures ?? []).map(finalizeMeasureForStore)
+  };
+}
+
+/** Netto voor werkvoorraad — toont null zolang er geen prijs is ingevuld. */
+export function proposalDashboardNetTotal(proposal: Proposal): number | null {
+  if (!proposal.measures.some(measureHasPricing)) return null;
+  return proposal.measures.reduce((sum, measure) => sum + measure.netInvestment, 0);
+}
+
+/** Verwijdert oude demo-presetbedragen uit eerdere Pipedrive-imports. */
+export function stripLegacyDemoPricing(measure: Measure): Measure {
+  const preset = measurePresets[measure.type];
+  const sameGross = measure.grossInvestment === preset.grossInvestment;
+  const sameExtra =
+    measure.extraWork.length === preset.extraWork.length &&
+    measure.extraWork.every((line, index) => {
+      const presetLine = preset.extraWork[index];
+      return presetLine && line.description === presetLine.description && line.amount === presetLine.amount;
+    });
+
+  if (!sameGross) return measure;
+  if (!sameExtra && measure.extraWork.length > 0) return measure;
+
+  return finalizeMeasureForStore({ ...measure, grossInvestment: 0, extraWork: [] });
+}
+
+export function stripLegacyDemoPricingFromProposal(proposal: Proposal): Proposal {
+  return {
+    ...proposal,
+    measures: proposal.measures.map(stripLegacyDemoPricing)
+  };
+}
+
 export function createMeasure(type: Measure["type"]): Measure {
   const base: Measure = {
     id: `${type}-${Date.now()}`,
