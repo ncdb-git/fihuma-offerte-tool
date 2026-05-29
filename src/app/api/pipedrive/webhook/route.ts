@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchPipedriveDealBundle, isTargetOfferStage, mapPipedriveBundleToProposal } from "@/lib/pipedrive";
-import { proposalStorageMode, upsertProposalConcept } from "@/lib/proposal-store";
+import { listProposalsByDealId, proposalStorageMode, upsertProposalConcept } from "@/lib/proposal-store";
 
 export const runtime = "nodejs";
 
@@ -129,6 +129,19 @@ export async function POST(request: Request) {
         receivedStageId,
         expectedStageId: expected,
         stageMatch: false,
+        ...env
+      });
+    }
+
+    const existingForDeal = await listProposalsByDealId(dealId);
+    if (existingForDeal.length > 0) {
+      logWebhook("SKIP_EXISTING_CONCEPT", { dealId, count: existingForDeal.length });
+      return NextResponse.json({
+        ok: true,
+        reason: "concept_already_exists",
+        dealId,
+        proposalId: existingForDeal[0].proposal.id,
+        stageMatch: true,
         ...env
       });
     }

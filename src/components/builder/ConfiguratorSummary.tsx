@@ -1,6 +1,14 @@
 "use client";
 
-import { calculateIsdeSubsidy, formatCustomerSalutation, measureBrutoTotal, measureExtraWorkTotal, MEASURE_TYPE_LABELS, money } from "@/lib/proposal-engine";
+import {
+  calculateIsdeSubsidy,
+  formatCustomerSalutation,
+  measureAdjustmentsTotal,
+  measureBrutoTotal,
+  measureExtraWorkTotal,
+  MEASURE_TYPE_LABELS,
+  money
+} from "@/lib/proposal-engine";
 import { Measure, Proposal } from "@/lib/types";
 
 const SALUTATION_LABELS: Record<Proposal["customer"]["salutation"], string> = {
@@ -57,6 +65,7 @@ export function ConfiguratorSummary({ proposal }: { proposal: Proposal }) {
         const nip = subsidyAmount(measure, "cfg-nip");
         const isdeCalculation = calculateIsdeSubsidy(measure);
         const extraTotal = measureExtraWorkTotal(measure);
+        const adjustmentsTotal = measureAdjustmentsTotal(measure);
         const brutoTotal = measureBrutoTotal(measure);
         return (
           <section className="rounded-xl border border-fihuma-line border-l-4 border-l-fihuma-green bg-[#fbfcfa] p-4" key={measure.id}>
@@ -87,6 +96,12 @@ export function ConfiguratorSummary({ proposal }: { proposal: Proposal }) {
                 <div className="flex justify-between text-[#4a5751]">
                   <dt>Meerwerk</dt>
                   <dd className="font-bold">{money(extraTotal)}</dd>
+                </div>
+              ) : null}
+              {adjustmentsTotal !== 0 ? (
+                <div className="flex justify-between text-[#4a5751]">
+                  <dt>Korting / toeslag</dt>
+                  <dd className="font-bold">{money(adjustmentsTotal)}</dd>
                 </div>
               ) : null}
               <div className="flex justify-between border-t border-dashed border-fihuma-line pt-1.5">

@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { normalizeProposalStatus } from "@/lib/proposal-status";
-import { isPipedriveDealId, pipedriveRecordId } from "@/lib/proposal-store-ids";
+import { isPipedriveDealId } from "@/lib/proposal-store-ids";
 import { Proposal } from "@/lib/types";
 import type { UpsertSource } from "@/lib/proposal-store-types";
 
@@ -123,7 +123,7 @@ export function buildSupabaseProposalPayload(
 ): SupabaseProposalRow {
   const dealId = proposal.customer.pipedriveDealId;
   const pipedriveDealId = isPipedriveDealId(dealId) ? dealId : dealId || proposal.id;
-  const proposalId = isPipedriveDealId(dealId) ? pipedriveRecordId(dealId) : proposal.id;
+  const proposalId = proposal.id;
   const now = new Date().toISOString();
 
   const payload: SupabaseProposalRow = {
@@ -134,7 +134,7 @@ export function buildSupabaseProposalPayload(
     source,
     advisor: sanitizeForJsonb(proposal.advisor) as unknown as Record<string, unknown>,
     customer: sanitizeForJsonb(proposal.customer) as unknown as Record<string, unknown>,
-    proposal_data: sanitizeForJsonb({ ...proposal, id: proposalId, status: normalizeProposalStatus(proposal.status) }),
+    proposal_data: sanitizeForJsonb({ ...proposal, id: proposal.id, status: normalizeProposalStatus(proposal.status) }),
     pipedrive_deal_url: proposal.customer.pipedriveDealLink ?? null,
     updated_at: now
   };

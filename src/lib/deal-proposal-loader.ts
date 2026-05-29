@@ -1,7 +1,12 @@
 import { fetchPipedriveDealBundle, mapPipedriveBundleToProposal } from "@/lib/pipedrive";
 import { resolveCustomerAddressFromBundle } from "@/lib/pipedrive-address";
-import { createGuidedProposal } from "@/lib/proposal-engine";
-import { getProposalConceptByDealId, pipedriveRecordId, upsertProposalConcept } from "@/lib/proposal-store";
+import { createGuidedProposal, MEASURE_TYPE_LABELS } from "@/lib/proposal-engine";
+import {
+  generateProposalId,
+  getProposalConceptById,
+  listProposalsByDealId,
+  upsertProposalConcept
+} from "@/lib/proposal-store";
 import { Proposal } from "@/lib/types";
 
 async function backfillAddressFromPipedrive(proposal: Proposal, dealId: string) {
@@ -32,37 +37,80 @@ async function backfillAddressFromPipedrive(proposal: Proposal, dealId: string) 
   };
 }
 
-/** Laadt een bestaand concept of maakt er één aan — zonder bevestigingsscherm. */
-export async function ensureProposalForDeal(dealId: string): Promise<Proposal> {
-  const existing = await getProposalConceptByDealId(dealId);
-  if (existing) {
-    const backfill = await backfillAddressFromPipedrive(existing, dealId);
-    if (backfill.updated) {
-      const result = await upsertProposalConcept(backfill.proposal, "advisor");
-      console.info("[create] adres aangevuld vanuit Pipedrive", { dealId, sources: backfill.sources });
-      return result.proposal;
-    }
-    console.info("[create] bestaand proposal geladen", { dealId, proposalId: existing.id });
-    return existing;
-  }
-
+export async function createNewProposalForDeal(dealId: string): Promise<Proposal> {
   if (process.env.PIPEDRIVE_API_TOKEN) {
     try {
       const bundle = await fetchPipedriveDealBundle(dealId);
       const fromPipedrive = await mapPipedriveBundleToProposal(dealId, bundle);
-      const result = await upsertProposalConcept(fromPipedrive, "advisor");
-      console.info("[create] proposal aangemaakt uit Pipedrive", { dealId, proposalId: result.proposal.id });
+      const withId = { ...fromPipedrive, id: generateProposalId(dealId) };
+      const result = await upsertProposalConcept(withId, "advisor");
       return result.proposal;
     } catch (error) {
-      console.warn("[create] Pipedrive ophalen mislukt, standaard configurator", { dealId, error });
+      console.warn("[create] Pipedrive ophalen mislukt voor nieuwe offerte", { dealId, error });
     }
   }
 
   const fallback = {
     ...createGuidedProposal(dealId),
-    id: pipedriveRecordId(dealId)
+    id: generateProposalId(dealId),
+    customer: {
+      ...createGuidedProposal(dealId).customer,
+      pipedriveDealId: dealId,
+      pipedriveDealLink: `https://app.pipedrive.com/deal/${dealId}`
+    }
   };
   const result = await upsertProposalConcept(fallback, "advisor");
-  console.info("[create] proposal aangemaakt met standaardwaarden", { dealId, proposalId: result.proposal.id });
   return result.proposal;
+}
+
+type EnsureOptions = {
+  proposalId?: string;
+  createNew?: boolean;
+};
+
+export type EnsureProposalResult = {
+  proposal: Proposal;
+  siblings: Awaited<ReturnType<typeof listProposalsByDealId>>;
+};
+
+/** Laadt bestaand concept, maakt nieuw concept aan, of opent specifieke offerte. */
+export async function ensureProposalForDeal(dealId: string, options: EnsureOptions = {}): Promise<EnsureProposalResult> {
+  if (options.createNew) {
+    const proposal = await createNewProposalForDeal(dealId);
+    return { proposal, siblings: await listProposalsByDealId(dealId) };
+  }
+
+  if (options.proposalId) {
+    const byId = await getProposalConceptById(options.proposalId);
+    if (byId) {
+      const backfill = await backfillAddressFromPipedrive(byId, dealId);
+      if (backfill.updated) {
+        const result = await upsertProposalConcept(backfill.proposal, "advisor");
+        return { proposal: result.proposal, siblings: await listProposalsByDealId(dealId) };
+      }
+      return { proposal: byId, siblings: await listProposalsByDealId(dealId) };
+    }
+  }
+
+  const siblings = await listProposalsByDealId(dealId);
+  const existing = siblings[0]?.proposal;
+  if (existing && !options.createNew) {
+    const backfill = await backfillAddressFromPipedrive(existing, dealId);
+    if (backfill.updated) {
+      const result = await upsertProposalConcept(backfill.proposal, "advisor");
+      return { proposal: result.proposal, siblings: await listProposalsByDealId(dealId) };
+    }
+    return { proposal: existing, siblings };
+  }
+
+  const created = await createNewProposalForDeal(dealId);
+  return { proposal: created, siblings: await listProposalsByDealId(dealId) };
+}
+
+export function proposalDisplayTitle(proposal: Proposal) {
+  const measure = proposal.measures[0];
+  if (measure) {
+    return `${MEASURE_TYPE_LABELS[measure.type]} offerte`;
+  }
+  return proposal.title || proposal.id;
 }

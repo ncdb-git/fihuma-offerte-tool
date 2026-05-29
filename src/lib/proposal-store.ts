@@ -1,7 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { isArchivedStatus, normalizeProposalStatus } from "@/lib/proposal-status";
-import { isPipedriveDealId, pipedriveRecordId, storageKeyForProposal } from "@/lib/proposal-store-ids";
+import { generateProposalId, isPipedriveDealId, storageKeyForProposal } from "@/lib/proposal-store-ids";
+import { normalizeMeasure } from "@/lib/proposal-engine";
 import type { ProposalRecord, UpsertProposalResult, UpsertSource, UpsertStorageResult } from "@/lib/proposal-store-types";
 import { Proposal, ProposalStatus } from "@/lib/types";
 import {
@@ -16,7 +17,7 @@ import {
 } from "@/lib/supabase-proposals";
 
 export { normalizeProposalStatus } from "@/lib/proposal-status";
-export { isPipedriveDealId, pipedriveRecordId } from "@/lib/proposal-store-ids";
+export { generateProposalId, isPipedriveDealId, pipedriveRecordId } from "@/lib/proposal-store-ids";
 export type { ProposalRecord, UpsertProposalResult, UpsertSource, UpsertStorageResult } from "@/lib/proposal-store-types";
 
 type StoredProposal = {
@@ -163,7 +164,19 @@ function isPipedriveRecord(proposal: Proposal) {
 function proposalFromRow(proposalData: unknown): Proposal | null {
   if (!proposalData || typeof proposalData !== "object") return null;
   const proposal = proposalData as Proposal;
-  return { ...proposal, status: normalizeProposalStatus(proposal.status) };
+  return {
+    ...proposal,
+    status: normalizeProposalStatus(proposal.status),
+    measures: (proposal.measures ?? []).map(normalizeMeasure),
+    agreement: {
+      paymentTerms: proposal.agreement?.paymentTerms ?? "",
+      subsidyClause: proposal.agreement?.subsidyClause ?? "",
+      nextSteps: proposal.agreement?.nextSteps ?? "",
+      termsReference: proposal.agreement?.termsReference ?? "",
+      approvalMethod: proposal.agreement?.approvalMethod ?? "digital",
+      priorApprovalDate: proposal.agreement?.priorApprovalDate ?? null
+    }
+  };
 }
 
 async function upsertSupabaseProposal(proposal: Proposal, source: UpsertSource, existingConcept: Proposal | null) {
@@ -171,9 +184,7 @@ async function upsertSupabaseProposal(proposal: Proposal, source: UpsertSource, 
   if (!client) throw new Error("Supabase client niet beschikbaar");
 
   const dealId = proposal.customer.pipedriveDealId;
-  const { data: existingRow, error: selectError } = isPipedriveDealId(dealId)
-    ? await findProposalRowByDealId(client, dealId)
-    : await findProposalRowByLookupId(client, proposal.id);
+  const { data: existingRow, error: selectError } = await findProposalRowByLookupId(client, proposal.id);
 
   if (selectError) {
     logSupabaseError(selectError, {});
@@ -194,7 +205,7 @@ async function upsertSupabaseProposal(proposal: Proposal, source: UpsertSource, 
 
   const { data: upserted, error: upsertError } = await client
     .from(PROPOSALS_TABLE)
-    .upsert(payloadRecord, { onConflict: "pipedrive_deal_id" })
+    .upsert(payloadRecord, { onConflict: "proposal_id" })
     .select("id, pipedrive_deal_id, proposal_id, status")
     .single();
 
@@ -224,19 +235,40 @@ async function upsertSupabaseProposal(proposal: Proposal, source: UpsertSource, 
   return { proposal, created, storage };
 }
 
-export async function getProposalConceptByDealId(dealId: string) {
+export async function listProposalsByDealId(dealId: string): Promise<ProposalRecord[]> {
   const client = supabaseClient();
   if (client) {
-    const { data, error } = await client.from(PROPOSALS_TABLE).select("proposal_data").eq("pipedrive_deal_id", dealId).maybeSingle();
+    const { data, error } = await client
+      .from(PROPOSALS_TABLE)
+      .select("proposal_data, created_at, updated_at, status")
+      .eq("pipedrive_deal_id", dealId)
+      .order("created_at", { ascending: false });
+
     if (error) {
       logSupabaseError(error, { pipedrive_deal_id: dealId });
       throw error;
     }
-    return proposalFromRow(data?.proposal_data);
+
+    return (data ?? [])
+      .map((entry) => {
+        const proposal = proposalFromRow(entry.proposal_data);
+        if (!proposal) return null;
+        return { proposal, createdAt: entry.created_at as string, updatedAt: entry.updated_at as string };
+      })
+      .filter((entry): entry is ProposalRecord => Boolean(entry));
   }
 
-  const entry = (await getLocalStore()).get(dealId);
-  return entry ? { ...entry.proposal, status: normalizeProposalStatus(entry.proposal.status) } : null;
+  const map = await getLocalStore();
+  return Array.from(map.values())
+    .filter((entry) => entry.proposal.customer.pipedriveDealId === dealId)
+    .map(toRecord)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+/** Meest recente concept voor een deal (backward compatible). */
+export async function getProposalConceptByDealId(dealId: string) {
+  const records = await listProposalsByDealId(dealId);
+  return records[0]?.proposal ?? null;
 }
 
 export async function getProposalConceptById(id: string) {
@@ -267,11 +299,12 @@ export async function getProposalConceptById(id: string) {
 export async function upsertProposalConcept(proposal: Proposal, source: UpsertSource = "advisor"): Promise<UpsertProposalResult> {
   const dealId = proposal.customer.pipedriveDealId;
   const storageKey = storageKeyForProposal(proposal);
-  const existingConcept = isPipedriveDealId(dealId)
-    ? await getProposalConceptByDealId(dealId)
-    : await getProposalConceptById(proposal.id);
+  const existingConcept = await getProposalConceptById(proposal.id);
 
-  let nextProposal = { ...proposal, id: isPipedriveDealId(dealId) ? pipedriveRecordId(dealId) : proposal.id };
+  let nextProposal = {
+    ...proposal,
+    measures: proposal.measures.map(normalizeMeasure)
+  };
 
   if (source === "webhook" && existingConcept && shouldPreserveWorkflow(existingConcept.status)) {
     nextProposal = mergePipedriveRefresh(existingConcept, nextProposal);
@@ -424,7 +457,7 @@ export async function updateProposalStatus(id: string, status: Proposal["status"
   const map = await getLocalStore();
   const entry =
     map.get(id) ??
-    Array.from(map.values()).find((value) => value.proposal.id === id || pipedriveRecordId(value.proposal.customer.pipedriveDealId) === id);
+    Array.from(map.values()).find((value) => value.proposal.id === id);
 
   if (!entry) throw new Error(`Proposal ${id} niet gevonden`);
 
@@ -438,4 +471,46 @@ export async function updateProposalStatus(id: string, status: Proposal["status"
 
   console.info("[proposal-store] proposal status updated", { storageMode: "file", proposalId: id, status: normalized });
   return next.proposal;
+}
+
+export async function deleteProposalConcept(id: string) {
+  const client = supabaseClient();
+  if (client) {
+    const { data: row, error: findError } = await findProposalRowByLookupId(client, id);
+    if (findError) throw findError;
+    if (!row) throw new Error(`Proposal ${id} niet gevonden`);
+
+    const { error } = await client.from(PROPOSALS_TABLE).delete().eq("id", row.id);
+    if (error) throw error;
+    return;
+  }
+
+  const map = await getLocalStore();
+  const key = Array.from(map.entries()).find(
+    ([, entry]) => entry.proposal.id === id || storageKeyForProposal(entry.proposal) === id
+  )?.[0];
+  if (!key) throw new Error(`Proposal ${id} niet gevonden`);
+  map.delete(key);
+  await persistLocalStore(map);
+}
+
+export async function duplicateProposalConcept(id: string): Promise<Proposal> {
+  const existing = await getProposalConceptById(id);
+  if (!existing) throw new Error(`Proposal ${id} niet gevonden`);
+
+  const dealId = existing.customer.pipedriveDealId;
+  const duplicate: Proposal = {
+    ...existing,
+    id: generateProposalId(dealId),
+    status: "In bewerking",
+    createdAt: new Date().toISOString(),
+    title: `${existing.title} (kopie)`,
+    measures: existing.measures.map((measure) => ({
+      ...normalizeMeasure(measure),
+      id: `${measure.type}-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`
+    }))
+  };
+
+  const result = await upsertProposalConcept(duplicate, "advisor");
+  return result.proposal;
 }

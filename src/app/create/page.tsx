@@ -6,22 +6,29 @@ import { getProposalConceptById, proposalStorageMode } from "@/lib/proposal-stor
 
 export const dynamic = "force-dynamic";
 
-export default async function CreateProposalPage({ searchParams }: { searchParams: { deal_id?: string; id?: string } }) {
+export default async function CreateProposalPage({
+  searchParams
+}: {
+  searchParams: { deal_id?: string; id?: string; proposal_id?: string; new?: string };
+}) {
   const manualId = searchParams.id ?? `manual-${Date.now()}`;
   const dealId = searchParams.deal_id;
+  const proposalId = searchParams.proposal_id;
+  const createNew = searchParams.new === "1";
 
   if (dealId) {
-    const proposal = await ensureProposalForDeal(dealId);
+    const { proposal, siblings } = await ensureProposalForDeal(dealId, { proposalId, createNew });
     console.info("[create] configurator openen", {
       storageMode: proposalStorageMode(),
       dealId,
-      found: true,
-      proposalId: proposal.id
+      proposalId: proposal.id,
+      siblingCount: siblings.length,
+      createNew
     });
 
     return (
       <AuthGate>
-        <ProposalBuilder initialProposal={proposal} />
+        <ProposalBuilder dealId={dealId} initialProposal={proposal} siblingProposals={siblings} />
       </AuthGate>
     );
   }

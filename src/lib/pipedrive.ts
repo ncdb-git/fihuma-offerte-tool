@@ -9,6 +9,7 @@ import {
   MAIN_PRODUCTS
 } from "@/lib/proposal-engine";
 import { resolveCustomerAddressFromBundle } from "@/lib/pipedrive-address";
+import { generateProposalId } from "@/lib/proposal-store-ids";
 import { Customer, IsdeSubsidyStatus, MeasureType, Proposal } from "@/lib/types";
 
 import { pipedriveBaseUrl, pipedriveToken } from "@/lib/pipedrive-config";
@@ -191,11 +192,12 @@ export async function mapPipedriveBundleToProposal(dealId: string, bundle: Await
   const ownerEmail = textValue(getPath(source, "deal.owner_id.email"));
   const advisor = advisors.find((item) => item.email.toLowerCase() === ownerEmail.toLowerCase()) ?? advisors[0];
   const proposal = createGuidedProposal(dealId);
+  const proposalId = generateProposalId(dealId);
 
   return {
     ...proposal,
-    id: `FIH-${dealId}`,
-    quoteNumber: `FIH-${dealId}`,
+    id: proposalId,
+    quoteNumber: proposalId,
     status: "Nieuw vanuit Pipedrive",
     advisor,
     customer: {
@@ -212,7 +214,8 @@ export async function mapPipedriveBundleToProposal(dealId: string, bundle: Await
     situation: {
       ...proposal.situation,
       isolationTargets: isolationLabelForType(measureType),
-      summary: "Dit offerteconcept is automatisch aangemaakt vanuit Pipedrive. Controleer de gegevens en vul de offerte waar nodig aan."
+      summary:
+        "Naar aanleiding van de inspectie lichten wij de gekozen isolatiemaatregel en bijbehorende investering toe."
     },
     measures: [measure]
   };

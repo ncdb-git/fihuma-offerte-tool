@@ -1,5 +1,10 @@
 import { Advisor, Customer, IsdeSubsidyStatus, Measure, MoneyLine, Proposal } from "@/lib/types";
 
+export const OFFER_VALID_DAYS = 14;
+
+export const PRIOR_APPROVAL_NOTICE =
+  "De opdrachtgever heeft reeds akkoord gegeven via het ondertekende advies- en calculatieformulier. Dit document dient uitsluitend als bevestiging en verdere uitwerking van de gemaakte afspraken.";
+
 export const advisors: Advisor[] = [
   {
     id: "jeffrey",
@@ -127,7 +132,7 @@ export const measurePresets: Record<Measure["type"], Omit<Measure, "id">> = {
     application: "Bodemafsluiting van de kruipruimte met isolerende EPS-parels.",
     squareMeters: 48,
     description: "Bodemisolatie met EPS-parels helpt kou en vocht vanuit de kruipruimte te beperken en verhoogt het wooncomfort.",
-    rcValue: "Rbf 3,5 m²K/W",
+    rcValue: "Rc 4,04",
     warranty: "15 jaar garantie",
     lifespan: "25 jaar en langer functioneel.",
     benefits: ["Vochtwerend", "Lichtgewicht EPS-parels", "Snelle verwerking", "Onderhoudsarm", "Comfortverbetering", "Lange levensduur"],
@@ -269,7 +274,7 @@ export const SUBSIDY_CLAUSE_OPTIONS = [
     id: "guarantee",
     label: "Subsidiegarantie",
     text:
-      "Met onze subsidiegarantie maken we het u zo makkelijk mogelijk: u levert uw gegevens eenmalig aan, wij starten direct met isoleren en de gemeente hoeft uw aanvraag maar een keer te beoordelen. Mocht uw correcte en tijdige NIP-aanvraag toch worden afgewezen, dan nemen wij het subsidiebedrag voor onze rekening."
+      "Met onze subsidiegarantie maken we het u zo makkelijk mogelijk: u levert uw gegevens eenmalig aan, wij starten direct met isoleren en de gemeente hoeft uw aanvraag maar een keer te beoordelen. Mocht uw correcte en tijdige NIP-aanvraag toch worden afgewezen, dan nemen wij het subsidiebedrag voor onze rekening. De subsidiegarantie geldt uitsluitend indien de werkzaamheden zijn uitgevoerd. Indien vóór uitvoering blijkt dat subsidiebudgetten zijn uitgeput of de regeling wordt beëindigd, kunnen de werkzaamheden geen doorgang vinden en vervalt de subsidiegarantie."
   },
   {
     id: "reservation",
@@ -282,13 +287,17 @@ export function measureExtraWorkTotal(measure: Measure) {
   return measure.extraWork.reduce((sum, line) => sum + line.amount, 0);
 }
 
+export function measureAdjustmentsTotal(measure: Measure) {
+  return (measure.adjustments ?? []).reduce((sum, line) => sum + line.amount, 0);
+}
+
 export function measureBrutoTotal(measure: Measure) {
   return measure.grossInvestment + measureExtraWorkTotal(measure);
 }
 
 export function calculateNetInvestment(measure: Measure) {
   const subsidies = measure.subsidies.reduce((sum, line) => sum + line.amount, 0);
-  return measureBrutoTotal(measure) + subsidies;
+  return measureBrutoTotal(measure) + subsidies + measureAdjustmentsTotal(measure);
 }
 
 export function applyAutomaticIsdeSubsidy(measure: Measure, nipEuro = 0): Measure {
@@ -300,10 +309,20 @@ export function applyAutomaticIsdeSubsidy(measure: Measure, nipEuro = 0): Measur
   return { ...next, netInvestment: calculateNetInvestment(next) };
 }
 
+export function normalizeMeasure(measure: Measure): Measure {
+  return {
+    ...measure,
+    adjustments: measure.adjustments ?? [],
+    extraWork: measure.extraWork ?? [],
+    subsidies: measure.subsidies ?? []
+  };
+}
+
 export function createMeasure(type: Measure["type"]): Measure {
   const base: Measure = {
     id: `${type}-${Date.now()}`,
     ...measurePresets[type],
+    adjustments: [],
     subsidyStatus: measurePresets[type].subsidyStatus ?? "single"
   };
   return applyAutomaticIsdeSubsidy(base);
@@ -315,9 +334,13 @@ export function createBlankMeasure(type: Measure["type"]): Measure {
   const cleared: Measure = {
     ...base,
     id: `${type}-${Date.now()}`,
+    squareMeters: 0,
+    grossInvestment: 0,
     extraWork: [],
+    adjustments: [],
     subsidies: [],
-    subsidyStatus: base.subsidyStatus ?? "single"
+    subsidyStatus: base.subsidyStatus ?? "single",
+    netInvestment: 0
   };
   return applyAutomaticIsdeSubsidy(cleared);
 }
@@ -352,7 +375,7 @@ const PRODUCT_PATCH: Partial<Record<Measure["type"], Record<string, Partial<Meas
     pif40: { productName: "PIF FLOOR40", rcValue: "Rd 4,0 m²K/W", warranty: "15 jaar garantie" }
   },
   bodem: {
-    eps: { productName: "EPS-parels bodemisolatie", rcValue: "Rbf 3,5 m²K/W", warranty: "15 jaar garantie" }
+    eps: { productName: "EPS-parels bodemisolatie", rcValue: "Rc 4,04", warranty: "15 jaar garantie" }
   },
   dak: {
     roof35: { productName: "PIF Roof35", rcValue: "Rd 3,5 m²K/W", warranty: "15 jaar garantie" },
@@ -596,7 +619,9 @@ export function createDemoProposal(dealId = "1234"): Proposal {
       nextSteps:
         "Na uw akkoord stemmen wij de planning met u af en ontvangt u een opdrachtbevestiging met de definitieve afspraken. Eventuele subsidieaanvragen begeleiden wij uiteraard in overleg met u.",
       termsReference:
-        "Op deze offerte en de uitvoering zijn onze algemene voorwaarden van toepassing. Deze sturen we altijd mee met de offerte."
+        "Op deze offerte en de uitvoering zijn onze algemene voorwaarden van toepassing. Deze sturen we altijd mee met de offerte.",
+      approvalMethod: "digital",
+      priorApprovalDate: null
     },
     measures: [createMeasure("spouwmuur"), createMeasure("vloer")]
   };
@@ -613,7 +638,8 @@ export function createGuidedProposal(dealId = "1234"): Proposal {
     situation: {
       ...base.situation,
       isolationTargets: isolationLabelForType("vloer"),
-      summary: "In deze offerte lichten wij de gekozen isolatiemaatregel en bijbehorende investering toe."
+      summary:
+        "Naar aanleiding van de inspectie lichten wij de gekozen isolatiemaatregel en bijbehorende investering toe."
     }
   };
 }

@@ -2,8 +2,10 @@
 
 import { ArrowLeft, Check, ChevronRight, FileDown, LogOut, UploadCloud } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AdjustmentsPanel } from "@/components/builder/AdjustmentsPanel";
 import { ConfiguratorSummary } from "@/components/builder/ConfiguratorSummary";
 import { MeerwerkPanel } from "@/components/builder/MeerwerkPanel";
+import { NumberInput } from "@/components/ui/NumberInput";
 import { ProposalDocument } from "@/components/proposal/ProposalDocument";
 import { AUTH_STORAGE_KEY } from "@/lib/auth";
 import {
@@ -28,8 +30,10 @@ import {
   SUBSIDY_CLAUSE_OPTIONS,
   type BuilderModules
 } from "@/lib/proposal-engine";
+import { proposalDisplayTitle } from "@/lib/deal-proposal-loader";
 import { isPipedriveDealId } from "@/lib/proposal-store-ids";
 import { Measure, MeasureType, Proposal, Salutation } from "@/lib/types";
+import { normalizeProposalStatus } from "@/lib/proposal-status";
 import { useRouter } from "next/navigation";
 
 type PipedriveUploadState = "idle" | "loading" | "success" | "error";
@@ -70,7 +74,21 @@ function rebuildMeasure(measure: Measure, parts: { modules: BuilderModules; nip:
   return { ...next, netInvestment: calculateNetInvestment(next) };
 }
 
-export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal }) {
+type SiblingProposal = {
+  proposal: Proposal;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function ProposalBuilder({
+  initialProposal,
+  dealId,
+  siblingProposals = []
+}: {
+  initialProposal: Proposal;
+  dealId?: string;
+  siblingProposals?: SiblingProposal[];
+}) {
   const router = useRouter();
   const [proposal, setProposal] = useState(initialProposal);
   const [step, setStepState] = useState(1);
@@ -83,6 +101,7 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
   const [productKey, setProductKey] = useState(() => (m0 ? getProductKeyForMeasure(m0) : "pif35"));
   const [pipedriveUploadState, setPipedriveUploadState] = useState<PipedriveUploadState>("idle");
   const [pipedriveUploadMessage, setPipedriveUploadMessage] = useState<string | null>(null);
+  const [fieldError, setFieldError] = useState<string | null>(null);
 
   const measure = proposal.measures[0];
   const total = useMemo(() => proposal.measures.reduce((sum, m) => sum + m.netInvestment, 0), [proposal.measures]);
@@ -128,7 +147,7 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
         isolationTargets: isolationLabelForType(type)
       }
     }));
-    setStep(4);
+    tryStep(4);
   };
 
   const pickProduct = (key: string) => {
@@ -159,9 +178,30 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
     }
   }
 
+  function validateStep(targetStep: number): string | null {
+    if (!measure) return "Geen maatregel geladen.";
+    if (targetStep > 3 && measure.squareMeters <= 0) {
+      return "Vul het aantal m² in (groter dan 0) voordat u verdergaat.";
+    }
+    if (targetStep > 5 && measure.grossInvestment <= 0) {
+      return "Vul een bruto investering in (groter dan €0) voordat u verdergaat.";
+    }
+    return null;
+  }
+
   function setStep(nextStep: number) {
+    const error = validateStep(nextStep);
+    if (error) {
+      setFieldError(error);
+      return;
+    }
+    setFieldError(null);
     setStepState(nextStep);
     void saveConcept("advisor");
+  }
+
+  function tryStep(nextStep: number) {
+    setStep(nextStep);
   }
 
   useEffect(() => {
@@ -351,6 +391,11 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
               {pipedriveUploadMessage}
             </p>
           ) : null}
+          {fieldError ? (
+            <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700" role="alert">
+              {fieldError}
+            </p>
+          ) : null}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
@@ -359,6 +404,44 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
               <p className="text-sm leading-relaxed text-[#4a5751]">
                 Klant, maatregel, product & meerwerk, investering. Minimaal typen — de preview werkt live mee.
               </p>
+              {dealId ? (
+                <section className="rounded-xl border border-fihuma-line bg-[#fbfcfa] p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-xs font-black uppercase tracking-wide text-fihuma-green">Conceptoffertes</p>
+                    <a
+                      className="rounded-lg border border-fihuma-green bg-white px-2 py-1 text-[11px] font-bold text-fihuma-green"
+                      href={`/create?deal_id=${dealId}&new=1`}
+                    >
+                      Nieuwe offerte
+                    </a>
+                  </div>
+                  {siblingProposals.length === 0 ? (
+                    <p className="text-xs text-[#64736b]">Nog geen andere concepten voor deze klant.</p>
+                  ) : (
+                    <ul className="grid gap-2">
+                      {siblingProposals.map((entry) => (
+                        <li className="rounded-lg border border-fihuma-line bg-white px-3 py-2 text-xs" key={entry.proposal.id}>
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="font-black">{proposalDisplayTitle(entry.proposal)}</p>
+                              <p className="text-[#64736b]">
+                                {normalizeProposalStatus(entry.proposal.status)} ·{" "}
+                                {new Date(entry.createdAt).toLocaleDateString("nl-NL")}
+                              </p>
+                            </div>
+                            <a
+                              className="font-bold text-fihuma-green underline"
+                              href={`/create?deal_id=${dealId}&proposal_id=${encodeURIComponent(entry.proposal.id)}`}
+                            >
+                              Openen
+                            </a>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              ) : null}
               <label className="grid gap-1">
                 <span className="text-xs font-bold text-[#64736b]">Adviseur</span>
                 <select
@@ -381,7 +464,7 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
               <button
                 type="button"
                 className="flex items-center justify-center gap-2 rounded-xl border-2 border-fihuma-green bg-fihuma-mint py-4 text-sm font-black text-fihuma-green"
-                onClick={() => setStep(2)}
+                onClick={() => tryStep(2)}
               >
                 Start <ChevronRight size={18} />
               </button>
@@ -444,7 +527,7 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
                 value={proposal.customer.email}
                 onChange={(e) => setProposal({ ...proposal, customer: { ...proposal.customer, email: e.target.value } })}
               />
-              <button type="button" className="mt-2 rounded-lg bg-fihuma-green py-2.5 text-sm font-bold text-white" onClick={() => setStep(3)}>
+              <button type="button" className="mt-2 rounded-lg bg-fihuma-green py-2.5 text-sm font-bold text-white" onClick={() => tryStep(3)}>
                 Verder naar maatregel
               </button>
             </div>
@@ -455,19 +538,20 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
               <p className="text-xs font-bold uppercase tracking-wide text-[#64736b]">Maatregel</p>
               <label className="grid gap-1 rounded-xl border border-fihuma-line bg-[#fbfcfa] p-3">
                 <span className="text-xs font-bold text-[#64736b]">Oppervlakte (m²)</span>
-                <input
-                  type="number"
+                <NumberInput
                   min={0}
                   step={1}
+                  hasError={fieldError?.includes("m²") ?? false}
                   className="rounded-lg border border-fihuma-line px-3 py-2 text-sm"
                   value={measure.squareMeters}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    setFieldError(null);
                     setProposal((p) => {
                       const cur = p.measures[0];
                       if (!cur) return p;
                       return { ...p, measures: [syncFinancials({ ...cur, squareMeters: Number(e.target.value) || 0 }, modules, nip)] };
-                    })
-                  }
+                    });
+                  }}
                 />
                 <span className="text-[11px] leading-relaxed text-[#64736b]">Vul eerst het aantal m² in en kies daarna de maatregel, bijvoorbeeld bodemisolatie.</span>
               </label>
@@ -520,7 +604,7 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
               <button type="button" className="text-xs font-bold text-[#64736b] underline" onClick={() => setStep(3)}>
                 Ander maatregeltype
               </button>
-              <button type="button" className="rounded-lg bg-fihuma-green py-2.5 text-sm font-bold text-white" onClick={() => setStep(5)}>
+              <button type="button" className="rounded-lg bg-fihuma-green py-2.5 text-sm font-bold text-white" onClick={() => tryStep(5)}>
                 Naar investering
               </button>
             </div>
@@ -531,17 +615,18 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
               <p className="text-xs font-bold uppercase tracking-wide text-[#64736b]">Investering</p>
               <label className="grid gap-1">
                 <span className="text-xs font-bold text-[#64736b]">Basis isolatie (€)</span>
-                <input
-                  type="number"
+                <NumberInput
+                  hasError={fieldError?.includes("investering") ?? false}
                   className="rounded-lg border border-fihuma-line px-3 py-2 text-sm"
                   value={measure.grossInvestment}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    setFieldError(null);
                     setProposal((p) => {
                       const cur = p.measures[0];
                       if (!cur) return p;
                       return { ...p, measures: [syncFinancials({ ...cur, grossInvestment: Number(e.target.value) || 0 }, modules, nip)] };
-                    })
-                  }
+                    });
+                  }}
                 />
               </label>
               {measure.extraWork.length > 0 ? (
@@ -557,6 +642,17 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
                   </ul>
                 </div>
               ) : null}
+              <AdjustmentsPanel
+                measureId={measure.id}
+                adjustments={measure.adjustments ?? []}
+                onChange={(adjustments) =>
+                  setProposal((p) => {
+                    const cur = p.measures[0];
+                    if (!cur) return p;
+                    return { ...p, measures: [syncFinancials({ ...cur, adjustments }, modules, nip)] };
+                  })
+                }
+              />
               <div className="rounded-lg border border-fihuma-line bg-fihuma-mint px-3 py-2 text-sm">
                 <div className="flex justify-between font-bold">
                   <span>Bruto investering (incl. meerwerk)</span>
@@ -608,8 +704,7 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
               </div>
               <label className="grid gap-1">
                 <span className="text-xs font-bold text-[#64736b]">NIP / gemeente subsidie (€)</span>
-                <input
-                  type="number"
+                <NumberInput
                   className="rounded-lg border border-fihuma-line px-3 py-2 text-sm"
                   value={nip || ""}
                   placeholder="0"
@@ -654,7 +749,7 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
                 <p className="text-xs font-bold uppercase text-fihuma-green">Netto (automatisch)</p>
                 <p className="text-xl font-black text-fihuma-green">{money(measure.netInvestment)}</p>
               </div>
-              <button type="button" className="rounded-lg bg-fihuma-green py-2.5 text-sm font-bold text-white" onClick={() => setStep(6)}>
+              <button type="button" className="rounded-lg bg-fihuma-green py-2.5 text-sm font-bold text-white" onClick={() => tryStep(6)}>
                 Afronden
               </button>
             </div>
@@ -663,6 +758,44 @@ export function ProposalBuilder({ initialProposal }: { initialProposal: Proposal
           {step === 6 && (
             <div className="grid gap-3">
               <p className="text-sm font-bold text-fihuma-green">Samenvatting offerte</p>
+              <label className="grid gap-1">
+                <span className="text-xs font-bold text-[#64736b]">Wijze van akkoord</span>
+                <select
+                  className="rounded-lg border border-fihuma-line px-3 py-2 text-sm"
+                  value={proposal.agreement.approvalMethod ?? "digital"}
+                  onChange={(e) =>
+                    setProposal({
+                      ...proposal,
+                      agreement: {
+                        ...proposal.agreement,
+                        approvalMethod: e.target.value as Proposal["agreement"]["approvalMethod"]
+                      }
+                    })
+                  }
+                >
+                  <option value="digital">Digitale overeenkomst genereren</option>
+                  <option value="prior-form">Reeds akkoord via advies- en calculatieformulier</option>
+                </select>
+              </label>
+              {proposal.agreement.approvalMethod === "prior-form" ? (
+                <label className="grid gap-1">
+                  <span className="text-xs font-bold text-[#64736b]">Akkoorddatum (optioneel)</span>
+                  <input
+                    type="date"
+                    className="rounded-lg border border-fihuma-line px-3 py-2 text-sm"
+                    value={proposal.agreement.priorApprovalDate?.slice(0, 10) ?? ""}
+                    onChange={(e) =>
+                      setProposal({
+                        ...proposal,
+                        agreement: {
+                          ...proposal.agreement,
+                          priorApprovalDate: e.target.value ? new Date(e.target.value).toISOString() : null
+                        }
+                      })
+                    }
+                  />
+                </label>
+              ) : null}
               <ConfiguratorSummary proposal={proposal} />
             </div>
           )}

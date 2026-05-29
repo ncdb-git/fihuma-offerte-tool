@@ -1,4 +1,15 @@
-import { calculateIsdeSubsidy, formatCustomerSalutation, formatLetterGreeting, measureBrutoTotal, money, PAYMENT_TERM_OPTIONS } from "@/lib/proposal-engine";
+import {
+  calculateIsdeSubsidy,
+  formatCustomerSalutation,
+  formatLetterGreeting,
+  measureAdjustmentsTotal,
+  measureBrutoTotal,
+  measureExtraWorkTotal,
+  money,
+  OFFER_VALID_DAYS,
+  PAYMENT_TERM_OPTIONS,
+  PRIOR_APPROVAL_NOTICE
+} from "@/lib/proposal-engine";
 import { Measure, Proposal } from "@/lib/types";
 import { Fragment } from "react";
 
@@ -10,7 +21,7 @@ function nlDateMedium(iso: string) {
   return new Date(iso).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function offerValidUntilLabel(iso: string, validDays = 30) {
+function offerValidUntilLabel(iso: string, validDays = OFFER_VALID_DAYS) {
   const d = new Date(iso);
   d.setHours(12, 0, 0, 0);
   d.setDate(d.getDate() + validDays);
@@ -251,12 +262,10 @@ function CoverPage({ proposal }: { proposal: Proposal }) {
 function OverviewPage({ proposal }: { proposal: Proposal }) {
   const customer = proposal.customer;
   const addr = `${customer.address}, ${customer.postalCode} ${customer.city}`;
-  const inspectionWhen = nlDateLong(proposal.situation.inspectionDate);
-
   return (
     <ProposalPageShell className="overview-page">
       <p className="eyebrow">Uw voorstel</p>
-      <h2>Van opname naar helder isolatieadvies</h2>
+      <h2>Van inspectie naar helder isolatieadvies</h2>
 
       <div className="overview-flow">
         <div className="overview-flow__intro">
@@ -273,24 +282,12 @@ function OverviewPage({ proposal }: { proposal: Proposal }) {
                 <dd>{addr}</dd>
               </div>
               <div className="spec-dl__row">
-                <dt>Woningtype</dt>
-                <dd>{proposal.situation.buildingType}</dd>
-              </div>
-              <div className="spec-dl__row">
-                <dt>Bouwjaar</dt>
-                <dd>{proposal.situation.buildYear}</dd>
-              </div>
-              <div className="spec-dl__row">
                 <dt>Te isoleren onderdelen</dt>
                 <dd>{proposal.situation.isolationTargets}</dd>
               </div>
               <div className="spec-dl__row">
                 <dt>Inspectie door</dt>
                 <dd>{proposal.advisor.name}</dd>
-              </div>
-              <div className="spec-dl__row">
-                <dt>Inspectiedatum</dt>
-                <dd>{inspectionWhen}</dd>
               </div>
             </dl>
           </article>
@@ -327,75 +324,66 @@ function cleanSubsidyDescription(description: string) {
 
 function InvestmentTable({ measure, paymentTerms }: { measure: Measure; paymentTerms: string }) {
   const brutoTotal = measureBrutoTotal(measure);
+  const extraTotal = measureExtraWorkTotal(measure);
+  const adjustmentsTotal = measureAdjustmentsTotal(measure);
   const subsidyTotal = measure.subsidies.reduce((sum, line) => sum + Math.abs(line.amount), 0);
   const showDepositSchedule = paymentTerms === PAYMENT_TERM_OPTIONS[0].text;
 
   return (
     <div className="investment-wrap">
-      <div className="investment-split investment-split--premium">
-        <section className="investment-card investment-card--breakdown">
-          <p className="investment-card__title">Investering</p>
-          <div className="investment-amount-row investment-amount-row--primary">
-            <span>Bruto investering</span>
-            <strong>{money(brutoTotal)}</strong>
+      <div className="investment-table">
+        <div className="investment-table__row">
+          <span className="investment-table__desc">
+            Basis isolatie ({measure.squareMeters} m² {measure.productName})
+          </span>
+          <strong className="investment-table__amt">{money(measure.grossInvestment)}</strong>
+        </div>
+        {measure.extraWork.map((row) => (
+          <div className="investment-table__row" key={row.id}>
+            <span className="investment-table__desc">{row.description}</span>
+            <strong className="investment-table__amt">{money(row.amount)}</strong>
           </div>
-
-          <p className="investment-breakdown-note">
-            {measure.squareMeters} m² {measure.productName} {measure.title.toLowerCase()}
-          </p>
-
-          {measure.extraWork.length > 0 ? (
-            <div className="investment-mini-list">
-              {measure.extraWork.map((row) => (
-                <div key={row.id}>
-                  <span>{row.description}</span>
-                  <strong>{money(row.amount)}</strong>
-                </div>
-              ))}
+        ))}
+        {(measure.adjustments ?? []).map((row) => (
+          <div className="investment-table__row" key={row.id}>
+            <span className="investment-table__desc">{row.description || "Korting / toeslag"}</span>
+            <strong className={`investment-table__amt ${row.amount < 0 ? "investment-table__row--credit" : ""}`}>
+              {money(row.amount)}
+            </strong>
+          </div>
+        ))}
+        <div className="investment-table__row investment-table__row--muted">
+          <span className="investment-table__desc">Subtotaal bruto (incl. meerwerk)</span>
+          <strong className="investment-table__amt">{money(brutoTotal + adjustmentsTotal)}</strong>
+        </div>
+        {measure.subsidies.map((row) => (
+          <div className="investment-table__row investment-table__row--credit" key={row.id}>
+            <span className="investment-table__desc">{cleanSubsidyDescription(row.description)}</span>
+            <strong className="investment-table__amt">− {money(Math.abs(row.amount))}</strong>
+          </div>
+        ))}
+        {showDepositSchedule ? (
+          <>
+            <div className="investment-table__row investment-table__row--muted">
+              <span className="investment-table__desc">25% bij akkoord</span>
+              <strong className="investment-table__amt">{money((brutoTotal + adjustmentsTotal) * 0.25)}</strong>
             </div>
-          ) : null}
-
-          <div className="investment-subsidy-benefit">
-            <p className="investment-card__title">Subsidievoordeel</p>
-            {measure.subsidies.length > 0 ? (
-              <div className="investment-mini-list investment-mini-list--subsidy">
-                {measure.subsidies.map((row) => (
-                  <div key={row.id}>
-                    <span>{cleanSubsidyDescription(row.description)}</span>
-                    <strong>{money(Math.abs(row.amount))}</strong>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="investment-breakdown-note">Er is geen subsidie opgenomen voor deze maatregel.</p>
-            )}
-          </div>
-
-          {showDepositSchedule ? (
-            <div className="payment-schedule">
-              <div>
-                <span>25% bij akkoord</span>
-                <strong>{money(brutoTotal * 0.25)}</strong>
-              </div>
-              <div>
-                <span>75% achteraf na oplevering</span>
-                <strong>{money(brutoTotal * 0.75)}</strong>
-              </div>
+            <div className="investment-table__row investment-table__row--muted">
+              <span className="investment-table__desc">75% achteraf na oplevering</span>
+              <strong className="investment-table__amt">{money((brutoTotal + adjustmentsTotal) * 0.75)}</strong>
             </div>
-          ) : null}
-        </section>
-
-        <section className="investment-net-hero">
-          <p>Uw netto investering</p>
-          <strong>{money(measure.netInvestment)}</strong>
-          <span>Na verrekening van {subsidyTotal > 0 ? money(subsidyTotal) : money(0)} aan beschikbare subsidies.</span>
-          <div className="investment-included-list">
-            <span>Inclusief montage</span>
-            <span>Inclusief materiaal</span>
-            <span>Inclusief afwerking</span>
-          </div>
-        </section>
+          </>
+        ) : null}
       </div>
+
+      <div className="investment-net investment-net--brand">
+        <span>Netto investering</span>
+        <strong>{money(measure.netInvestment)}</strong>
+      </div>
+      <p className="investment-breakdown-note">
+        Na verrekening van {subsidyTotal > 0 ? money(subsidyTotal) : money(0)} aan subsidies
+        {extraTotal > 0 ? ` en ${money(extraTotal)} meerwerk` : ""}.
+      </p>
     </div>
   );
 }
@@ -469,6 +457,9 @@ function InvestmentPage({ proposal, measure }: { proposal: Proposal; measure: Me
 
 function AgreementPage({ proposal }: { proposal: Proposal }) {
   const validUntil = offerValidUntilLabel(proposal.createdAt);
+  const priorForm = proposal.agreement.approvalMethod === "prior-form";
+  const measure = proposal.measures[0];
+  const isde = measure ? calculateIsdeSubsidy(measure) : null;
 
   return (
     <ProposalPageShell className="agreement-page">
@@ -489,7 +480,7 @@ function AgreementPage({ proposal }: { proposal: Proposal }) {
           <article className="text-panel">
             <h3>Geldigheidsduur</h3>
             <p>
-              Deze offerte is geldig tot <strong>{validUntil}</strong> (30 dagen na de offertedatum), tenzij anders vermeld.
+              Deze offerte is geldig tot <strong>{validUntil}</strong> ({OFFER_VALID_DAYS} dagen na de offertedatum), tenzij anders vermeld.
             </p>
           </article>
         </div>
@@ -497,28 +488,29 @@ function AgreementPage({ proposal }: { proposal: Proposal }) {
 
       <section className="agreement-card-group">
         <h3>Subsidie en ondersteuning</h3>
-        <div className="agreement-card-grid">
+        <div className="agreement-card-grid agreement-card-grid--four">
           <article className="text-panel agreement-full">
             <h3>Meldcode</h3>
-            <div className="meldcode-list">
-              {proposal.measures.map((measure) => {
-                const isde = calculateIsdeSubsidy(measure);
-                return (
-                  <div className="meldcode-list__row" key={measure.id}>
-                    <p>
-                      Voor {measure.productName} ({measure.title.toLowerCase()}) is de meldcode m.b.t. de ISDE subsidie <strong>{meldcodeForMeasure(measure)}</strong>.
-                    </p>
-                    <p>
-                      {isde.isTooSmall
-                        ? `Voor deze maatregel geldt een minimale subsidiabele oppervlakte van ${isde.min} m². Daarom is er geen ISDE-subsidie opgenomen.`
-                        : `${isde.explanation} Het berekende ISDE-bedrag is ${money(isde.amount)} op basis van ${isde.eligibleSquareMeters} subsidiabele m²${
-                            isde.isCapped ? `, met een maximum van ${isde.max} m².` : "."
-                          }`}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
+            {proposal.measures.map((m) => (
+              <p key={m.id}>
+                Voor {m.productName} ({m.title.toLowerCase()}) is de meldcode m.b.t. de ISDE subsidie{" "}
+                <strong>{meldcodeForMeasure(m)}</strong>.
+              </p>
+            ))}
+          </article>
+          <article className="text-panel agreement-full">
+            <h3>ISDE subsidie</h3>
+            {measure && isde ? (
+              <p>
+                {isde.isTooSmall
+                  ? `Voor deze maatregel geldt een minimale subsidiabele oppervlakte van ${isde.min} m². Daarom is er geen ISDE-subsidie opgenomen.`
+                  : `${isde.explanation} Het berekende ISDE-bedrag is ${money(isde.amount)} op basis van ${isde.eligibleSquareMeters} subsidiabele m²${
+                      isde.isCapped ? `, met een maximum van ${isde.max} m².` : "."
+                    }`}
+              </p>
+            ) : (
+              <p>Geen ISDE-subsidie opgenomen.</p>
+            )}
           </article>
           <article className="text-panel agreement-full">
             <h3>Subsidievoorwaarden</h3>
@@ -549,17 +541,28 @@ function AgreementPage({ proposal }: { proposal: Proposal }) {
           <strong>{proposal.advisor.name}</strong>
         </div>
 
-        <div className="signature-block">
-          <p className="signature-block__intro">Akkoord voor uitvoering conform deze offerte:</p>
-          <div className="signature-grid">
-            <div>
-              <span>{formatCustomerSalutation(proposal.customer)}</span>
-            </div>
-            <div>
-              <span>Handtekening en datum</span>
+        {priorForm ? (
+          <article className="text-panel agreement-full">
+            <p>{PRIOR_APPROVAL_NOTICE}</p>
+            {proposal.agreement.priorApprovalDate ? (
+              <p>
+                <strong>Akkoorddatum:</strong> {nlDateLong(proposal.agreement.priorApprovalDate)}
+              </p>
+            ) : null}
+          </article>
+        ) : (
+          <div className="signature-block">
+            <p className="signature-block__intro">Akkoord voor uitvoering conform deze offerte:</p>
+            <div className="signature-grid">
+              <div>
+                <span>{formatCustomerSalutation(proposal.customer)}</span>
+              </div>
+              <div>
+                <span>Handtekening en datum</span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </section>
 
       <p className="agreement-legal-small">

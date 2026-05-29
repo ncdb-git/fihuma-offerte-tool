@@ -1,10 +1,12 @@
 "use client";
 
-import { Archive, Search, SlidersHorizontal } from "lucide-react";
+import { Archive, Copy, FileDown, Search, SlidersHorizontal, Trash2, UploadCloud } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { money } from "@/lib/proposal-engine";
+import { proposalDisplayTitle } from "@/lib/deal-proposal-loader";
+import { formatProposalPdfFilename, money } from "@/lib/proposal-engine";
 import { normalizeProposalStatus } from "@/lib/proposal-status";
+import { isPipedriveDealId } from "@/lib/proposal-store-ids";
 import { Proposal } from "@/lib/types";
 
 type ProposalRecord = {
@@ -14,11 +16,14 @@ type ProposalRecord = {
 };
 
 function proposalHref(proposal: Proposal) {
-  return `/create?deal_id=${proposal.customer.pipedriveDealId}`;
+  if (isPipedriveDealId(proposal.customer.pipedriveDealId)) {
+    return `/create?deal_id=${proposal.customer.pipedriveDealId}&proposal_id=${encodeURIComponent(proposal.id)}`;
+  }
+  return `/create?id=${encodeURIComponent(proposal.id)}`;
 }
 
-function nlDateTime(iso: string) {
-  return new Date(iso).toLocaleString("nl-NL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+function nlDate(iso: string) {
+  return new Date(iso).toLocaleDateString("nl-NL", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 export function DashboardClient() {
@@ -28,6 +33,7 @@ export function DashboardClient() {
   const [error, setError] = useState("");
   const [storageMode, setStorageMode] = useState("");
   const [persistenceWarning, setPersistenceWarning] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   async function loadProposals() {
     setIsLoading(true);
@@ -53,6 +59,7 @@ export function DashboardClient() {
     () =>
       records.map((record) => ({
         ...record,
+        title: proposalDisplayTitle(record.proposal),
         netTotal: record.proposal.measures.reduce((sum, measure) => sum + measure.netInvestment, 0),
         status: normalizeProposalStatus(record.proposal.status)
       })),
@@ -60,11 +67,13 @@ export function DashboardClient() {
   );
 
   async function archiveProposal(id: string) {
+    setBusyId(id);
     const response = await fetch(`/api/proposals/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "Gearchiveerd" })
     });
+    setBusyId(null);
     if (!response.ok) {
       const payload = await response.json().catch(() => null);
       setError(payload?.error ?? "Archiveren mislukt.");
@@ -74,11 +83,87 @@ export function DashboardClient() {
     router.refresh();
   }
 
+  async function deleteProposal(id: string) {
+    if (!window.confirm("Conceptofferte definitief verwijderen?")) return;
+    setBusyId(id);
+    const response = await fetch(`/api/proposals/${encodeURIComponent(id)}`, { method: "DELETE" });
+    setBusyId(null);
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      setError(payload?.error ?? "Verwijderen mislukt.");
+      return;
+    }
+    await loadProposals();
+  }
+
+  async function duplicateProposal(record: ProposalRecord) {
+    setBusyId(record.proposal.id);
+    const response = await fetch(`/api/proposals/${encodeURIComponent(record.proposal.id)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "duplicate" })
+    });
+    setBusyId(null);
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      setError(payload?.error ?? "Dupliceren mislukt.");
+      return;
+    }
+    const payload = await response.json();
+    await loadProposals();
+    if (payload.proposal) router.push(proposalHref(payload.proposal as Proposal));
+  }
+
+  async function downloadPdf(record: ProposalRecord) {
+    setBusyId(record.proposal.id);
+    const response = await fetch(`/api/proposals/${encodeURIComponent(record.proposal.id)}/pdf`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(record.proposal)
+    });
+    setBusyId(null);
+    if (!response.ok) {
+      setError("PDF download mislukt.");
+      return;
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = formatProposalPdfFilename(record.proposal);
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function uploadToPipedrive(record: ProposalRecord) {
+    if (!isPipedriveDealId(record.proposal.customer.pipedriveDealId)) {
+      setError("Geen Pipedrive-deal gekoppeld.");
+      return;
+    }
+    setBusyId(record.proposal.id);
+    const response = await fetch("/api/pipedrive/upload-pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(record.proposal)
+    });
+    setBusyId(null);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.ok === false) {
+      setError(payload.error ?? "Upload naar Pipedrive mislukt.");
+      return;
+    }
+    await loadProposals();
+  }
+
   return (
     <section className="px-8 py-7">
       <div className="mb-8">
         <h1 className="text-3xl font-black">Werkvoorraad</h1>
-        <p className="mt-1 text-sm text-[#64736b]">Deals uit Pipedrive in stadium ‘Offerte maken’. Open een regel om verder te werken aan het concept.</p>
+        <p className="mt-1 text-sm text-[#64736b]">
+          Alle conceptoffertes per klant. Meerdere offertes per deal zijn mogelijk (bijv. bodem, spouw, combinatie).
+        </p>
       </div>
 
       {persistenceWarning ? (
@@ -116,42 +201,83 @@ export function DashboardClient() {
 
         {!isLoading && records.length > 0 ? (
           <p className="border-b border-fihuma-line bg-[#fbfcfa] px-5 py-2 text-xs text-[#64736b]">
-            {records.length} deal{records.length === 1 ? "" : "s"} · opslag: {storageMode === "supabase" ? "Supabase" : "lokaal bestand"}
+            {records.length} concept{records.length === 1 ? "" : "en"} · opslag: {storageMode === "supabase" ? "Supabase" : "lokaal bestand"}
           </p>
         ) : null}
 
         {rows.map((record) => {
-          const { proposal, netTotal, status } = record;
+          const { proposal, netTotal, status, title } = record;
           const href = proposalHref(proposal);
+          const disabled = busyId === proposal.id;
           return (
             <div
-              className="grid cursor-pointer grid-cols-[1.1fr_1fr_130px_130px_130px_150px_110px] items-center border-b border-fihuma-line px-5 py-4 text-[#17221d] transition last:border-0 hover:bg-[#fbfcfa]"
+              className="grid grid-cols-[1fr_1fr_120px_110px_110px_1.4fr] items-center border-b border-fihuma-line px-5 py-4 text-[#17221d] last:border-0"
               key={proposal.id}
-              onClick={() => router.push(href)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") router.push(href);
-              }}
-              role="button"
-              tabIndex={0}
             >
               <div>
                 <p className="font-black">{proposal.customer.name}</p>
                 <p className="text-sm text-[#64736b]">{proposal.customer.city || "—"}</p>
               </div>
-              <p className="text-sm">
-                {proposal.customer.address}
-                {proposal.customer.city ? `, ${proposal.customer.city}` : ""}
-              </p>
-              <p className="text-sm text-[#64736b]">{proposal.advisor.name}</p>
+              <div>
+                <p className="text-sm font-bold">{title}</p>
+                <p className="text-xs text-[#64736b]">{proposal.id}</p>
+              </div>
               <span className="w-fit rounded-full bg-fihuma-mint px-3 py-1 text-xs font-black text-fihuma-green">{status}</span>
+              <span className="text-xs font-bold text-[#64736b]">{nlDate(record.createdAt)}</span>
               <strong>{netTotal > 0 ? money(netTotal) : "—"}</strong>
-              <span className="text-xs font-bold text-[#64736b]">{nlDateTime(record.updatedAt)}</span>
-              <div className="flex gap-2" onClick={(event) => event.stopPropagation()}>
-                <button className="rounded-md border border-fihuma-line bg-white px-3 py-2 text-xs font-black" onClick={() => router.push(href)} title="Openen" type="button">
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  className="rounded-md border border-fihuma-line bg-white px-2 py-1.5 text-[11px] font-black"
+                  disabled={disabled}
+                  onClick={() => router.push(href)}
+                  type="button"
+                >
                   Openen
                 </button>
-                <button className="rounded-md border border-fihuma-line bg-white p-2" onClick={() => archiveProposal(proposal.id)} title="Archiveren" type="button">
-                  <Archive size={17} />
+                <button
+                  className="rounded-md border border-fihuma-line bg-white p-1.5"
+                  disabled={disabled}
+                  onClick={() => duplicateProposal(record)}
+                  title="Dupliceren"
+                  type="button"
+                >
+                  <Copy size={15} />
+                </button>
+                <button
+                  className="rounded-md border border-fihuma-line bg-white p-1.5"
+                  disabled={disabled}
+                  onClick={() => downloadPdf(record)}
+                  title="PDF"
+                  type="button"
+                >
+                  <FileDown size={15} />
+                </button>
+                <button
+                  className="rounded-md border border-fihuma-line bg-white p-1.5"
+                  disabled={disabled}
+                  onClick={() => uploadToPipedrive(record)}
+                  title="Pipedrive"
+                  type="button"
+                >
+                  <UploadCloud size={15} />
+                </button>
+                <button
+                  className="rounded-md border border-fihuma-line bg-white p-1.5"
+                  disabled={disabled}
+                  onClick={() => archiveProposal(proposal.id)}
+                  title="Archiveren"
+                  type="button"
+                >
+                  <Archive size={15} />
+                </button>
+                <button
+                  className="rounded-md border border-red-200 bg-red-50 p-1.5 text-red-700"
+                  disabled={disabled}
+                  onClick={() => deleteProposal(proposal.id)}
+                  title="Verwijderen"
+                  type="button"
+                >
+                  <Trash2 size={15} />
                 </button>
               </div>
             </div>
@@ -164,13 +290,12 @@ export function DashboardClient() {
 
 function TableHeader() {
   return (
-    <div className="grid grid-cols-[1.1fr_1fr_130px_130px_130px_150px_110px] border-b border-fihuma-line bg-[#fbfcfa] px-5 py-3 text-xs font-black uppercase tracking-wider text-[#64736b]">
+    <div className="grid grid-cols-[1fr_1fr_120px_110px_110px_1.4fr] border-b border-fihuma-line bg-[#fbfcfa] px-5 py-3 text-xs font-black uppercase tracking-wider text-[#64736b]">
       <span>Klant</span>
-      <span>Adres</span>
-      <span>Adviseur</span>
+      <span>Conceptofferte</span>
       <span>Status</span>
+      <span>Aangemaakt</span>
       <span>Netto</span>
-      <span>Bijgewerkt</span>
       <span>Acties</span>
     </div>
   );

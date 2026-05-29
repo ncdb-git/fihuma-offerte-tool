@@ -1133,6 +1133,38 @@ blockquote cite {
   padding: 16px 18px;
 }
 
+.investment-net--brand {
+  background: linear-gradient(135deg, #1f6b45 0%, #2d8f5c 55%, #3cab6f 100%);
+  border: 2px solid #1a5c3a;
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(31, 107, 69, 0.28);
+  color: #fff;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 20px 22px;
+}
+
+.investment-net--brand span {
+  color: #e8f5ec;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.investment-net--brand strong {
+  color: #fff;
+  font-size: 2.4rem;
+  font-weight: 950;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.agreement-card-grid--four {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .investment-total {
   align-items: baseline;
   background: #f4f5f2;

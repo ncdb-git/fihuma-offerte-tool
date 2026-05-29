@@ -17,6 +17,8 @@ export type MeasureType = "spouwmuur" | "vloer" | "bodem" | "dak";
 
 export type IsdeSubsidyStatus = "single" | "double-fihuma" | "double-previous";
 
+export type AgreementApprovalMethod = "digital" | "prior-form";
+
 export type Advisor = {
   id: string;
   name: string;
@@ -60,6 +62,8 @@ export type Measure = {
   specifications: string[];
   workDescription: string;
   extraWork: MoneyLine[];
+  /** Korting (negatief) of toeslag (positief), los van meerwerk. */
+  adjustments?: MoneyLine[];
   subsidies: MoneyLine[];
   subsidyStatus?: IsdeSubsidyStatus;
   grossInvestment: number;
@@ -99,6 +103,8 @@ export type Proposal = {
     subsidyClause: string;
     nextSteps: string;
     termsReference: string;
+    approvalMethod: AgreementApprovalMethod;
+    priorApprovalDate?: string | null;
   };
   measures: Measure[];
 };

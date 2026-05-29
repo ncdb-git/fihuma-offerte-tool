@@ -1,5 +1,6 @@
 "use client";
 
+import { NumberInput } from "@/components/ui/NumberInput";
 import { MODULE_DEFAULT_PRICES, type BuilderModules } from "@/lib/proposal-engine";
 import { MeasureType } from "@/lib/types";
 
@@ -181,8 +182,7 @@ function CountPriceRow({
         <div className="mt-3 grid gap-2">
           <label className="grid gap-1">
             <span className="text-xs font-bold text-[#64736b]">Prijs per stuk (€)</span>
-            <input
-              type="number"
+            <NumberInput
               className="rounded-lg border border-fihuma-line px-3 py-2 text-sm font-bold"
               value={unitPrice || ""}
               placeholder={String(unitDefault)}
@@ -225,8 +225,7 @@ function TogglePriceRow({
       {enabled ? (
         <label className="mt-3 grid gap-1">
           <span className="text-xs font-bold text-[#64736b]">Prijs (€)</span>
-          <input
-            type="number"
+          <NumberInput
             className="rounded-lg border border-fihuma-line px-3 py-2 text-sm font-bold"
             value={price || ""}
             placeholder={String(defaultPrice)}
