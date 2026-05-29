@@ -165,7 +165,12 @@ function toRecord(entry: StoredProposal): ProposalRecord {
 }
 
 function isPipedriveRecord(proposal: Proposal) {
-  return isPipedriveDealId(proposal.customer.pipedriveDealId);
+  return isPipedriveDealId(proposal.customer.pipedriveDealId?.trim() ?? "");
+}
+
+function isStoredConceptRecord(proposal: Proposal) {
+  const dealId = proposal.customer.pipedriveDealId?.trim() ?? "";
+  return isPipedriveDealId(dealId) || dealId === "" || dealId.startsWith("manual-");
 }
 
 function proposalFromRow(proposalData: unknown): Proposal | null {
@@ -373,7 +378,7 @@ export async function upsertProposalConcept(proposal: Proposal, source: UpsertSo
   return { proposal: next.proposal, created, storage };
 }
 
-export async function listProposalRecords({ includeArchived = false, pipedriveOnly = true } = {}): Promise<ProposalRecord[]> {
+export async function listProposalRecords({ includeArchived = false, pipedriveOnly = false } = {}): Promise<ProposalRecord[]> {
   logStorageModeOnce();
   const client = supabaseClient();
 
@@ -384,7 +389,11 @@ export async function listProposalRecords({ includeArchived = false, pipedriveOn
       .order("updated_at", { ascending: false });
 
     if (pipedriveOnly) {
-      query = query.not("pipedrive_deal_id", "is", null).neq("pipedrive_deal_id", "").neq("pipedrive_deal_id", "demo");
+      query = query.not("pipedrive_deal_id", "is", null).neq("pipedrive_deal_id", "").neq("pipedrive_deal_id", "demo").not(
+        "pipedrive_deal_id",
+        "like",
+        "manual-%"
+      );
     }
 
     if (!includeArchived) {
@@ -408,7 +417,7 @@ export async function listProposalRecords({ includeArchived = false, pipedriveOn
         };
       })
       .filter((entry): entry is ProposalRecord => Boolean(entry))
-      .filter((entry) => (pipedriveOnly ? isPipedriveRecord(entry.proposal) : true))
+      .filter((entry) => (pipedriveOnly ? isPipedriveRecord(entry.proposal) : isStoredConceptRecord(entry.proposal)))
       .filter((entry) => includeArchived || !isArchivedStatus(entry.proposal.status));
 
     console.info("[proposal-store] dashboard fetch count", { storageMode: "supabase", count: records.length, pipedriveOnly, includeArchived });
@@ -417,7 +426,7 @@ export async function listProposalRecords({ includeArchived = false, pipedriveOn
 
   const records = Array.from((await getLocalStore()).values())
     .map(toRecord)
-    .filter((entry) => (pipedriveOnly ? isPipedriveRecord(entry.proposal) : true))
+    .filter((entry) => (pipedriveOnly ? isPipedriveRecord(entry.proposal) : isStoredConceptRecord(entry.proposal)))
     .filter((entry) => includeArchived || !isArchivedStatus(entry.proposal.status))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 

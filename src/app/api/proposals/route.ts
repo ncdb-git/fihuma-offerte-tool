@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   try {
     const dealId = new URL(request.url).searchParams.get("deal_id")?.trim() ?? "";
     const storageMode = proposalStorageMode();
-    let records = await listProposalRecords({ pipedriveOnly: true, includeArchived: false });
+    let records = await listProposalRecords({ pipedriveOnly: false, includeArchived: false });
 
     if (dealId) {
       records = records.filter((entry) => entry.proposal.customer.pipedriveDealId === dealId);

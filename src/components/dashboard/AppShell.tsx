@@ -1,7 +1,8 @@
 "use client";
 
 import { AUTH_STORAGE_KEY } from "@/lib/auth";
-import { FileText, LayoutDashboard, LogOut, Users } from "lucide-react";
+import { CreateOfferteLink } from "@/components/dashboard/CreateOfferteLink";
+import { LayoutDashboard, LogOut, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -22,9 +23,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-fihuma-mint" href="/dashboard">
             <LayoutDashboard size={18} /> Dashboard
           </Link>
-          <Link className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-fihuma-mint" href="/create?manual=1">
-            <FileText size={18} /> Offerte maken
-          </Link>
+          <CreateOfferteLink />
           <Link className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-fihuma-mint" href="/admin/advisors">
             <Users size={18} /> Adviseurs
           </Link>

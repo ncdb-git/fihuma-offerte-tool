@@ -1,5 +1,6 @@
 export function isPipedriveDealId(dealId: string) {
-  return Boolean(dealId && dealId !== "demo" && !dealId.startsWith("manual-"));
+  const normalized = dealId?.trim() ?? "";
+  return Boolean(normalized && normalized !== "demo" && /^\d+$/.test(normalized));
 }
 
 /** @deprecated Gebruik generateProposalId — meerdere offertes per deal zijn toegestaan. */

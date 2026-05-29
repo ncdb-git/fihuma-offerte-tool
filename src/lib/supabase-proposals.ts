@@ -116,13 +116,23 @@ export function validateSupabaseProposalPayload(payload: Record<string, unknown>
   return issues;
 }
 
+/** Unieke sleutel voor Supabase — echte deals gebruiken deal_id, handmatige offertes `manual-{proposal_id}`. */
+export function storagePipedriveDealId(proposal: Proposal): string {
+  const dealId = proposal.customer.pipedriveDealId?.trim() ?? "";
+  if (isPipedriveDealId(dealId)) return dealId;
+  return `manual-${proposal.id}`;
+}
+
+export function isManualStorageDealId(pipedriveDealId: string) {
+  return pipedriveDealId.startsWith("manual-");
+}
+
 export function buildSupabaseProposalPayload(
   proposal: Proposal,
   source: UpsertSource,
   existing?: { id: string; created_at: string } | null
 ): SupabaseProposalRow {
-  const dealId = proposal.customer.pipedriveDealId;
-  const pipedriveDealId = isPipedriveDealId(dealId) ? dealId : dealId || proposal.id;
+  const pipedriveDealId = storagePipedriveDealId(proposal);
   const proposalId = proposal.id;
   const now = new Date().toISOString();
 
