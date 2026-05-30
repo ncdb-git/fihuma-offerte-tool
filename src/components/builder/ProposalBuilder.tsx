@@ -103,6 +103,7 @@ export function ProposalBuilder({
   const [pipedriveUploadState, setPipedriveUploadState] = useState<PipedriveUploadState>("idle");
   const [pipedriveUploadMessage, setPipedriveUploadMessage] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [creatingSibling, setCreatingSibling] = useState(false);
 
   const measure = proposal.measures[0];
@@ -194,9 +195,17 @@ export function ProposalBuilder({
       body: JSON.stringify({ ...proposalRef.current, source })
     });
     if (!response.ok) {
-      const message = await response.text();
-      throw new Error(message || "Concept opslaan mislukt.");
+      let message = "Concept opslaan mislukt.";
+      try {
+        const data = (await response.json()) as { error?: string };
+        if (data.error) message = data.error;
+      } catch {
+        const text = await response.text();
+        if (text) message = text;
+      }
+      throw new Error(message);
     }
+    setSaveError(null);
   }
 
   function validateStep(targetStep: number): string | null {
@@ -233,7 +242,10 @@ export function ProposalBuilder({
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      saveConcept("advisor").catch((error) => console.error("[builder] autosave mislukt", error));
+      saveConcept("advisor").catch((error) => {
+        console.error("[builder] autosave mislukt", error);
+        setSaveError(error instanceof Error ? error.message : "Concept opslaan mislukt.");
+      });
     }, 900);
 
     return () => {
@@ -463,6 +475,11 @@ export function ProposalBuilder({
               role="status"
             >
               {pipedriveUploadMessage}
+            </p>
+          ) : null}
+          {saveError ? (
+            <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900" role="alert">
+              Opslaan mislukt: {saveError}
             </p>
           ) : null}
           {fieldError ? (

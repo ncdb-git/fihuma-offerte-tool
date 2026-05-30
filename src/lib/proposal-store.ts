@@ -1,6 +1,7 @@
 import "server-only";
 
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { isArchivedStatus, normalizeProposalStatus } from "@/lib/proposal-status";
 import { generateProposalId, isPipedriveDealId, storageKeyForProposal } from "@/lib/proposal-store-ids";
@@ -34,8 +35,23 @@ type StoredProposal = {
   updatedAt: string;
 };
 
-const DATA_DIR = path.join(process.cwd(), ".data");
-const FILE_STORE_PATH = path.join(DATA_DIR, "proposal-concepts.json");
+function isServerlessRuntime() {
+  const cwd = process.cwd();
+  return Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || cwd === "/var/task" || cwd.startsWith("/var/task/"));
+}
+
+function isSupabaseConfigured() {
+  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+function resolveFileStorePath() {
+  if (isServerlessRuntime()) {
+    return path.join(os.tmpdir(), "fihuma-proposal-concepts.json");
+  }
+  return path.join(process.cwd(), ".data", "proposal-concepts.json");
+}
+
+const FILE_STORE_PATH = resolveFileStorePath();
 
 const WORKFLOW_PRESERVE_STATUSES = new Set<ProposalStatus | string>([
   "In bewerking",
@@ -56,7 +72,8 @@ declare global {
 let localStoreCache: Map<string, StoredProposal> | null = null;
 
 export function proposalStorageMode() {
-  return supabaseClient() ? "supabase" : "file";
+  if (supabaseClient()) return "supabase";
+  return isServerlessRuntime() ? "ephemeral-file" : "file";
 }
 
 function shouldPreserveWorkflow(status: Proposal["status"]) {
@@ -138,8 +155,9 @@ async function readFileStore(): Promise<Map<string, StoredProposal>> {
 }
 
 async function writeFileStore(map: Map<string, StoredProposal>) {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(FILE_STORE_PATH, JSON.stringify(Object.fromEntries(map.entries()), null, 2), "utf-8");
+  const filePath = resolveFileStorePath();
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, JSON.stringify(Object.fromEntries(map.entries()), null, 2), "utf-8");
   globalThis.fihumaProposalConcepts = map;
 }
 
@@ -199,14 +217,14 @@ async function upsertSupabaseProposal(proposal: Proposal, source: UpsertSource, 
   const dealId = proposal.customer.pipedriveDealId;
   const { data: existingRow, error: selectError } = await findProposalRowByLookupId(client, proposal.id);
 
-  if (selectError) {
+  if (selectError && selectError.code !== "PGRST116") {
     logSupabaseError(selectError, {});
-    throw selectError;
+    throw new Error(formatSupabaseError(selectError));
   }
 
   const created = !existingRow;
   const payload = buildSupabaseProposalPayload(proposal, source, existingRow);
-  const payloadRecord = payload as unknown as Record<string, unknown>;
+  const payloadRecord = { ...(payload as unknown as Record<string, unknown>) };
 
   const issues = validateSupabaseProposalPayload(payloadRecord);
   if (issues.length > 0) {
@@ -216,11 +234,15 @@ async function upsertSupabaseProposal(proposal: Proposal, source: UpsertSource, 
 
   logSupabaseProposalPayload(payloadRecord);
 
-  const writeQuery = existingRow?.id
-    ? client.from(PROPOSALS_TABLE).update(payloadRecord).eq("id", existingRow.id)
-    : client.from(PROPOSALS_TABLE).insert(payloadRecord);
+  if (!existingRow?.id) {
+    delete payloadRecord.id;
+  }
 
-  const { data: upserted, error: upsertError } = await writeQuery.select("id, pipedrive_deal_id, proposal_id, status").single();
+  const { data: upserted, error: upsertError } = await client
+    .from(PROPOSALS_TABLE)
+    .upsert(payloadRecord, { onConflict: "proposal_id" })
+    .select("id, pipedrive_deal_id, proposal_id, status")
+    .maybeSingle();
 
   if (upsertError) {
     logSupabaseError(upsertError, payloadRecord);
@@ -339,7 +361,11 @@ export async function upsertProposalConcept(proposal: Proposal, source: UpsertSo
     try {
       return await upsertSupabaseProposal(nextProposal, source, existingConcept);
     } catch (error) {
-      console.error("[proposal-store] Supabase upsert mislukt — fallback naar lokaal bestand", error);
+      console.error("[proposal-store] Supabase upsert mislukt", error);
+      if (isSupabaseConfigured()) {
+        throw error instanceof Error ? error : new Error(formatSupabaseError(error));
+      }
+      console.warn("[proposal-store] Supabase niet geconfigureerd — fallback naar bestand");
     }
   }
 
@@ -362,7 +388,7 @@ export async function upsertProposalConcept(proposal: Proposal, source: UpsertSo
     recordId: next.proposal.id,
     pipedriveDealId: dealId,
     status: next.proposal.status,
-    filePath: FILE_STORE_PATH
+    filePath: resolveFileStorePath()
   };
 
   console.info("[proposal-store] dashboard item saved", {

@@ -191,27 +191,30 @@ export function formatSupabaseError(error: unknown): string {
   return message;
 }
 
+const PROPOSAL_ROW_SELECT = "id, created_at, pipedrive_deal_id, proposal_id";
+
+/** Nieuwste rij bij dubbele matches (voorkomt PGRST116 bij meerdere rijen). */
+function latestProposalRowQuery(client: SupabaseClient) {
+  return client.from(PROPOSALS_TABLE).select(PROPOSAL_ROW_SELECT).order("updated_at", { ascending: false }).limit(1);
+}
+
 export async function findProposalRowByDealId(client: SupabaseClient, dealId: string) {
-  return client.from(PROPOSALS_TABLE).select("id, created_at, pipedrive_deal_id, proposal_id").eq("pipedrive_deal_id", dealId).maybeSingle();
+  return latestProposalRowQuery(client).eq("pipedrive_deal_id", dealId).maybeSingle();
 }
 
 export async function findProposalRowByLookupId(client: SupabaseClient, lookupId: string) {
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (uuidPattern.test(lookupId)) {
-    const byUuid = await client.from(PROPOSALS_TABLE).select("id, created_at, pipedrive_deal_id, proposal_id").eq("id", lookupId).maybeSingle();
+    const byUuid = await latestProposalRowQuery(client).eq("id", lookupId).maybeSingle();
     if (byUuid.data) return byUuid;
     if (byUuid.error) return byUuid;
   }
 
-  const byProposalId = await client
-    .from(PROPOSALS_TABLE)
-    .select("id, created_at, pipedrive_deal_id, proposal_id")
-    .eq("proposal_id", lookupId)
-    .maybeSingle();
+  const byProposalId = await latestProposalRowQuery(client).eq("proposal_id", lookupId).maybeSingle();
   if (byProposalId.data || byProposalId.error) return byProposalId;
 
   if (/^\d+$/.test(lookupId)) {
-    return client.from(PROPOSALS_TABLE).select("id, created_at, pipedrive_deal_id, proposal_id").eq("pipedrive_deal_id", lookupId).maybeSingle();
+    return latestProposalRowQuery(client).eq("pipedrive_deal_id", lookupId).maybeSingle();
   }
 
   return { data: null, error: null };
