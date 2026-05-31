@@ -4,7 +4,7 @@ import "server-only";
 
 import { createGuidedProposal } from "@/lib/proposal-engine";
 import {
-  generateProposalId,
+  allocateProposalId,
   getProposalConceptById,
   listProposalsByDealId,
   upsertProposalConcept
@@ -44,7 +44,8 @@ export async function createNewProposalForDeal(dealId: string): Promise<Proposal
     try {
       const bundle = await fetchPipedriveDealBundle(dealId);
       const fromPipedrive = await mapPipedriveBundleToProposal(dealId, bundle);
-      const withId = { ...fromPipedrive, id: generateProposalId(dealId) };
+      const newId = await allocateProposalId(dealId);
+      const withId = { ...fromPipedrive, id: newId, quoteNumber: newId };
       const result = await upsertProposalConcept(withId, "advisor");
       return result.proposal;
     } catch (error) {
@@ -53,9 +54,11 @@ export async function createNewProposalForDeal(dealId: string): Promise<Proposal
   }
 
   const guided = createGuidedProposal(dealId);
+  const newId = await allocateProposalId(dealId);
   const fallback = {
     ...guided,
-    id: generateProposalId(dealId),
+    id: newId,
+    quoteNumber: newId,
     customer: {
       ...guided.customer,
       pipedriveDealId: dealId,

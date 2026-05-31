@@ -2,7 +2,7 @@ import { AuthGate } from "@/components/auth/AuthGate";
 import { ProposalBuilder } from "@/components/builder/ProposalBuilder";
 import { ensureProposalForDeal } from "@/lib/deal-proposal-loader";
 import { createBlankManualProposal } from "@/lib/proposal-engine";
-import { getProposalConceptById, proposalStorageMode, upsertProposalConcept } from "@/lib/proposal-store";
+import { allocateProposalId, getProposalConceptById, proposalStorageMode, upsertProposalConcept } from "@/lib/proposal-store";
 
 export const dynamic = "force-dynamic";
 
@@ -94,7 +94,8 @@ export default async function CreateProposalPage({
       );
     }
 
-    const created = await upsertProposalConcept(createBlankManualProposal(), "advisor");
+    const newId = await allocateProposalId();
+    const created = await upsertProposalConcept(createBlankManualProposal(newId), "advisor");
 
     console.info("[create] handmatige offerte", {
       storageMode: proposalStorageMode(),

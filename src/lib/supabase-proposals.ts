@@ -120,7 +120,9 @@ export function validateSupabaseProposalPayload(payload: Record<string, unknown>
 export function storagePipedriveDealId(proposal: Proposal): string {
   const dealId = proposal.customer.pipedriveDealId?.trim() ?? "";
   if (isPipedriveDealId(dealId)) return dealId;
-  const suffix = proposal.id.replace(/^FIH-manual-/, "") || Date.now().toString(36).slice(-8);
+  const id = proposal.id.trim();
+  if (/^FIH-MAN-\d{4}-\d{4}$/.test(id)) return `manual-${id}`;
+  const suffix = id.replace(/^FIH-manual-/, "") || id.replace(/^FIH-MAN-/, "") || Date.now().toString(36).slice(-8);
   return `manual-${suffix}`;
 }
 

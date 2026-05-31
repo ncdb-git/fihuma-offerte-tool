@@ -1,9 +1,10 @@
 "use client";
 
-import { Archive, Copy, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Archive, ChevronDown, ChevronRight, Copy, Plus, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { advisors, money, proposalDashboardNetTotal, proposalDisplayTitle } from "@/lib/proposal-engine";
+import { groupDashboardProposals, isManualGroup, type DashboardCustomerGroup } from "@/lib/dashboard-groups";
+import { advisors } from "@/lib/proposal-engine";
 import { normalizeProposalStatus } from "@/lib/proposal-status";
 import { isPipedriveDealId } from "@/lib/proposal-store-ids";
 import { Proposal } from "@/lib/types";
@@ -25,6 +26,23 @@ function nlDate(iso: string) {
   return new Date(iso).toLocaleDateString("nl-NL", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
+function formatRelativeNl(iso: string) {
+  const date = new Date(iso);
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayDiff = Math.round((startOfToday.getTime() - startOfDate.getTime()) / 86_400_000);
+
+  if (dayDiff === 0) return "vandaag";
+  if (dayDiff === 1) return "gisteren";
+  return nlDate(iso);
+}
+
+function addressSummary(group: DashboardCustomerGroup) {
+  const parts = [group.addressLine !== "—" ? group.addressLine : "", group.city !== "—" ? group.city : ""].filter(Boolean);
+  return parts.length ? parts.join(", ") : "—";
+}
+
 export function DashboardClient() {
   const router = useRouter();
   const [records, setRecords] = useState<ProposalRecord[]>([]);
@@ -36,6 +54,7 @@ export function DashboardClient() {
   const [searchQuery, setSearchQuery] = useState("");
   const [advisorFilter, setAdvisorFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("active");
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   async function loadProposals() {
     setIsLoading(true);
@@ -54,28 +73,28 @@ export function DashboardClient() {
   }
 
   useEffect(() => {
-    loadProposals();
+    void loadProposals();
   }, []);
 
-  const rows = useMemo(
-    () =>
-      records.map((record) => ({
-        ...record,
-        title: proposalDisplayTitle(record.proposal),
-        netTotal: proposalDashboardNetTotal(record.proposal),
-        status: normalizeProposalStatus(record.proposal.status)
-      })),
-    [records]
-  );
-
-  const filteredRows = useMemo(() => {
+  const filteredRecords = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return rows.filter((record) => {
-      const { proposal, status } = record;
+    return records.filter((record) => {
+      const { proposal } = record;
       const customer = proposal.customer;
+      const status = normalizeProposalStatus(proposal.status);
 
       if (query) {
-        const haystack = [customer.name, customer.address, customer.city, customer.postalCode, proposal.id, record.title]
+        const haystack = [
+          customer.name,
+          customer.address,
+          customer.city,
+          customer.postalCode,
+          proposal.id,
+          proposal.quoteNumber,
+          proposal.advisor?.name,
+          proposal.measures[0]?.type
+        ]
+          .filter(Boolean)
           .join(" ")
           .toLowerCase();
         if (!haystack.includes(query)) return false;
@@ -91,7 +110,21 @@ export function DashboardClient() {
 
       return true;
     });
-  }, [rows, searchQuery, advisorFilter, statusFilter]);
+  }, [records, searchQuery, advisorFilter, statusFilter]);
+
+  const customerGroups = useMemo(() => groupDashboardProposals(filteredRecords), [filteredRecords]);
+
+  const totalConcepts = filteredRecords.length;
+  const totalCustomers = customerGroups.length;
+
+  function toggleGroup(groupKey: string) {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
+  }
 
   async function archiveProposal(id: string) {
     setBusyId(id);
@@ -123,9 +156,9 @@ export function DashboardClient() {
     await loadProposals();
   }
 
-  async function duplicateProposal(record: ProposalRecord) {
-    setBusyId(record.proposal.id);
-    const response = await fetch(`/api/proposals/${encodeURIComponent(record.proposal.id)}`, {
+  async function duplicateProposal(proposalId: string) {
+    setBusyId(proposalId);
+    const response = await fetch(`/api/proposals/${encodeURIComponent(proposalId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "duplicate" })
@@ -141,12 +174,33 @@ export function DashboardClient() {
     if (payload.proposal) router.push(proposalHref(payload.proposal as Proposal));
   }
 
+  async function createNewForDeal(dealId: string) {
+    setBusyId(`new-${dealId}`);
+    setError("");
+    const response = await fetch("/api/proposals/for-deal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dealId })
+    });
+    setBusyId(null);
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      setError(payload?.error ?? "Nieuwe offerte aanmaken mislukt.");
+      return;
+    }
+    if (payload.proposal) {
+      router.push(proposalHref(payload.proposal as Proposal));
+      return;
+    }
+    await loadProposals();
+  }
+
   return (
     <section className="px-8 py-7">
       <div className="mb-8">
         <h1 className="text-3xl font-black">Werkvoorraad</h1>
         <p className="mt-1 text-sm text-[#64736b]">
-          Alle conceptoffertes per klant. Meerdere offertes per deal zijn mogelijk (bijv. bodem, spouw, combinatie).
+          Gegroepeerd per klant/deal. Meerdere conceptoffertes onder één klant (bijv. vloer, bodem, spouw).
         </p>
       </div>
 
@@ -160,7 +214,7 @@ export function DashboardClient() {
           <input
             className="h-11 w-full outline-none"
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Zoeken op naam, straat of woonplaats"
+            placeholder="Zoeken op naam, straat, offertenummer…"
             value={searchQuery}
           />
         </label>
@@ -197,8 +251,6 @@ export function DashboardClient() {
       {error ? <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p> : null}
 
       <div className="overflow-hidden rounded-lg border border-fihuma-line bg-white shadow-panel">
-        <TableHeader />
-
         {isLoading ? <div className="px-5 py-8 text-sm font-bold text-[#64736b]">Werkvoorraad laden...</div> : null}
 
         {!isLoading && records.length === 0 ? (
@@ -209,107 +261,186 @@ export function DashboardClient() {
 
         {!isLoading && records.length > 0 ? (
           <p className="border-b border-fihuma-line bg-[#fbfcfa] px-5 py-2 text-xs text-[#64736b]">
-            {filteredRows.length} van {records.length} concept{records.length === 1 ? "" : "en"} · opslag:{" "}
+            {totalCustomers} klant{totalCustomers === 1 ? "" : "en"} · {totalConcepts} concept{totalConcepts === 1 ? "" : "en"} · opslag:{" "}
             {storageMode === "supabase" ? "Supabase" : "lokaal bestand"}
           </p>
         ) : null}
 
-        {!isLoading && records.length > 0 && filteredRows.length === 0 ? (
+        {!isLoading && records.length > 0 && customerGroups.length === 0 ? (
           <div className="px-5 py-8 text-sm text-[#64736b]">Geen concepten gevonden met deze filters.</div>
         ) : null}
 
-        {filteredRows.map((record) => {
-          const { proposal, netTotal, status, title } = record;
-          const href = proposalHref(proposal);
-          const disabled = busyId === proposal.id;
-          return (
-            <div
-              className="grid cursor-pointer grid-cols-[1fr_1fr_120px_110px_110px_1.4fr] items-center border-b border-fihuma-line px-5 py-4 text-[#17221d] transition hover:bg-[#f7faf6] last:border-0"
-              key={proposal.id}
-              onClick={() => router.push(href)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  router.push(href);
-                }
-              }}
-              role="link"
-              tabIndex={0}
-            >
-              <div>
-                <p className="font-black">{proposal.customer.name}</p>
-                <p className="text-sm text-[#64736b]">{proposal.customer.city || "—"}</p>
-              </div>
-              <div>
-                <p className="text-sm font-bold">{title}</p>
-                <p className="text-xs text-[#64736b]">{proposal.id}</p>
-              </div>
-              <span className="w-fit rounded-full bg-fihuma-mint px-3 py-1 text-xs font-black text-fihuma-green">{status}</span>
-              <span className="text-xs font-bold text-[#64736b]">{nlDate(record.createdAt)}</span>
-              <strong>{netTotal !== null ? money(netTotal) : "—"}</strong>
-              <div className="flex flex-wrap gap-1.5" onClick={(event) => event.stopPropagation()}>
-                <button
-                  className="rounded-md border border-fihuma-line bg-white px-2 py-1.5 text-[11px] font-black"
-                  disabled={disabled}
-                  onClick={() => router.push(href)}
-                  type="button"
-                >
-                  Openen
-                </button>
-                <button
-                  className="rounded-md border border-fihuma-line bg-white p-1.5"
-                  disabled={disabled}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void duplicateProposal(record);
-                  }}
-                  title="Dupliceren"
-                  type="button"
-                >
-                  <Copy size={15} />
-                </button>
-                <button
-                  className="rounded-md border border-fihuma-line bg-white p-1.5"
-                  disabled={disabled}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void archiveProposal(proposal.id);
-                  }}
-                  title="Archiveren"
-                  type="button"
-                >
-                  <Archive size={15} />
-                </button>
-                <button
-                  className="rounded-md border border-red-200 bg-red-50 p-1.5 text-red-700"
-                  disabled={disabled}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void deleteProposal(proposal.id);
-                  }}
-                  title="Verwijderen"
-                  type="button"
-                >
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
+        {customerGroups.map((group) => (
+          <CustomerGroupAccordion
+            busyId={busyId}
+            expanded={expandedGroups.has(group.groupKey)}
+            group={group}
+            key={group.groupKey}
+            onArchive={archiveProposal}
+            onCreateNew={
+              group.pipedriveDealId
+                ? () => void createNewForDeal(group.pipedriveDealId!)
+                : () => router.push("/create?manual=1")
+            }
+            onDelete={deleteProposal}
+            onDuplicate={duplicateProposal}
+            onOpenFirst={() => {
+              const first = group.proposals[0];
+              if (first) router.push(proposalHref(first.proposal));
+            }}
+            onToggle={() => toggleGroup(group.groupKey)}
+          />
+        ))}
       </div>
     </section>
   );
 }
 
-function TableHeader() {
+type CustomerGroupAccordionProps = {
+  group: DashboardCustomerGroup;
+  expanded: boolean;
+  busyId: string | null;
+  onToggle: () => void;
+  onOpenFirst: () => void;
+  onCreateNew?: () => void;
+  onDuplicate: (id: string) => void;
+  onArchive: (id: string) => void;
+  onDelete: (id: string) => void;
+};
+
+function CustomerGroupAccordion({
+  group,
+  expanded,
+  busyId,
+  onToggle,
+  onOpenFirst,
+  onCreateNew,
+  onDuplicate,
+  onArchive,
+  onDelete
+}: CustomerGroupAccordionProps) {
+  const router = useRouter();
+  const conceptLabel = `${group.conceptCount} conceptofferte${group.conceptCount === 1 ? "" : "s"}`;
+  const manual = isManualGroup(group);
+
   return (
-    <div className="grid grid-cols-[1fr_1fr_120px_110px_110px_1.4fr] border-b border-fihuma-line bg-[#fbfcfa] px-5 py-3 text-xs font-black uppercase tracking-wider text-[#64736b]">
-      <span>Klant</span>
-      <span>Conceptofferte</span>
-      <span>Status</span>
-      <span>Aangemaakt</span>
-      <span>Netto</span>
-      <span>Acties</span>
-    </div>
+    <article className="border-b border-fihuma-line last:border-0">
+      <div className="flex flex-wrap items-center gap-3 px-5 py-3.5 hover:bg-[#f7faf6]">
+        <button
+          aria-expanded={expanded}
+          className="flex min-w-0 flex-1 items-start gap-2 text-left"
+          onClick={onToggle}
+          type="button"
+        >
+          {expanded ? <ChevronDown className="mt-0.5 shrink-0 text-fihuma-green" size={18} /> : <ChevronRight className="mt-0.5 shrink-0 text-[#64736b]" size={18} />}
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-black text-[#17221d]">
+              {group.customerName}
+              <span className="font-bold text-[#64736b]"> · {addressSummary(group)}</span>
+            </p>
+            <p className="mt-0.5 text-xs text-[#64736b]">
+              {conceptLabel} · Laatst gewijzigd {formatRelativeNl(group.lastUpdatedAt)} · Adviseur: {group.advisorFirstName}
+              {manual ? " · Handmatig" : group.pipedriveDealId ? ` · Deal ${group.pipedriveDealId}` : null}
+            </p>
+            <p className="mt-1 text-xs font-semibold text-fihuma-green">{group.statusSummary}</p>
+          </div>
+        </button>
+
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            className="rounded-md border border-fihuma-line bg-white px-2.5 py-1.5 text-[11px] font-black"
+            onClick={onOpenFirst}
+            type="button"
+          >
+            Open klant
+          </button>
+          {onCreateNew ? (
+            <button
+              className="inline-flex items-center gap-1 rounded-md border border-fihuma-green bg-fihuma-mint px-2.5 py-1.5 text-[11px] font-black text-fihuma-green"
+              disabled={busyId === `new-${group.pipedriveDealId}`}
+              onClick={onCreateNew}
+              type="button"
+            >
+              <Plus size={14} /> Nieuwe offerte
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {expanded ? (
+        <div className="border-t border-fihuma-line bg-[#fbfcfa] px-5 py-3">
+          <p className="mb-2 text-xs font-black uppercase tracking-wider text-[#64736b]">Conceptoffertes</p>
+          <div className="space-y-2">
+            {group.proposals.map((row) => {
+              const href = proposalHref(row.proposal);
+              const disabled = busyId === row.proposal.id;
+              return (
+                <div
+                  className="grid gap-2 rounded-lg border border-fihuma-line bg-white px-4 py-3 md:grid-cols-[1fr_auto]"
+                  key={row.proposal.id}
+                >
+                  <div>
+                    <p className="text-sm font-black text-[#17221d]">
+                      {row.title} <span className="font-bold text-[#64736b]">· {row.measureLabel}</span>
+                    </p>
+                    <p className="mt-0.5 text-xs text-[#64736b]">
+                      {row.displayNumber} · {row.status} · Adviseur: {row.advisorLabel}
+                    </p>
+                    <p className="mt-0.5 text-xs text-[#64736b]">
+                      Aangemaakt {nlDate(row.createdAt)} · Bijgewerkt {formatRelativeNl(row.updatedAt)}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      className="rounded-md border border-fihuma-line bg-white px-2 py-1.5 text-[11px] font-black"
+                      disabled={disabled}
+                      onClick={() => router.push(href)}
+                      type="button"
+                    >
+                      Openen
+                    </button>
+                    <button
+                      className="rounded-md border border-fihuma-line bg-white px-2 py-1.5 text-[11px] font-black"
+                      disabled={disabled}
+                      onClick={() => router.push(href)}
+                      type="button"
+                    >
+                      Bewerken
+                    </button>
+                    <button
+                      className="rounded-md border border-fihuma-line bg-white p-1.5"
+                      disabled={disabled}
+                      onClick={() => onDuplicate(row.proposal.id)}
+                      title="Dupliceren"
+                      type="button"
+                    >
+                      <Copy size={15} />
+                    </button>
+                    <button
+                      className="rounded-md border border-fihuma-line bg-white p-1.5"
+                      disabled={disabled}
+                      onClick={() => onArchive(row.proposal.id)}
+                      title="Archiveren"
+                      type="button"
+                    >
+                      <Archive size={15} />
+                    </button>
+                    <button
+                      className="rounded-md border border-red-200 bg-red-50 p-1.5 text-red-700"
+                      disabled={disabled}
+                      onClick={() => onDelete(row.proposal.id)}
+                      title="Verwijderen"
+                      type="button"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </article>
   );
 }

@@ -4,7 +4,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { isArchivedStatus, normalizeProposalStatus } from "@/lib/proposal-status";
-import { generateProposalId, isPipedriveDealId, storageKeyForProposal } from "@/lib/proposal-store-ids";
+import { nextManualProposalId, nextPipedriveProposalId } from "@/lib/proposal-numbering";
+import { isPipedriveDealId, storageKeyForProposal } from "@/lib/proposal-store-ids";
 import {
   finalizeProposalForStore,
   normalizeMeasure,
@@ -25,7 +26,8 @@ import {
 } from "@/lib/supabase-proposals";
 
 export { normalizeProposalStatus } from "@/lib/proposal-status";
-export { generateProposalId, isPipedriveDealId, pipedriveRecordId } from "@/lib/proposal-store-ids";
+export { isPipedriveDealId, pipedriveRecordId } from "@/lib/proposal-store-ids";
+export { advisorFirstName, proposalDisplayNumber } from "@/lib/proposal-numbering";
 export type { ProposalRecord, UpsertProposalResult, UpsertSource, UpsertStorageResult } from "@/lib/proposal-store-types";
 
 type StoredProposal = {
@@ -267,6 +269,21 @@ async function upsertSupabaseProposal(proposal: Proposal, source: UpsertSource, 
   });
 
   return { proposal, created, storage };
+}
+
+/** Nieuw leesbaar offertenummer; bestaande ids blijven ongewijzigd. */
+export async function allocateProposalId(dealId = ""): Promise<string> {
+  if (isPipedriveDealId(dealId)) {
+    const siblings = await listProposalsByDealId(dealId);
+    return nextPipedriveProposalId(dealId, siblings.map((entry) => entry.proposal.id));
+  }
+
+  const records = await listProposalRecords({ includeArchived: true, pipedriveOnly: false });
+  const manualIds = records
+    .filter((entry) => !isPipedriveDealId(entry.proposal.customer.pipedriveDealId?.trim() ?? ""))
+    .map((entry) => entry.proposal.id);
+
+  return nextManualProposalId(manualIds);
 }
 
 export async function listProposalsByDealId(dealId: string): Promise<ProposalRecord[]> {
@@ -538,10 +555,12 @@ export async function duplicateProposalConcept(id: string): Promise<Proposal> {
   const existing = await getProposalConceptById(id);
   if (!existing) throw new Error(`Proposal ${id} niet gevonden`);
 
-  const dealId = existing.customer.pipedriveDealId;
+  const dealId = existing.customer.pipedriveDealId?.trim() ?? "";
+  const newId = await allocateProposalId(dealId);
   const duplicate: Proposal = {
     ...existing,
-    id: generateProposalId(dealId),
+    id: newId,
+    quoteNumber: newId,
     status: "In bewerking",
     createdAt: new Date().toISOString(),
     title: `${existing.title} (kopie)`,

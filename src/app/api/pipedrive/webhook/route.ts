@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchPipedriveDealBundle, isTargetOfferStage, mapPipedriveBundleToProposal } from "@/lib/pipedrive";
 import { normalizeProposalStatus } from "@/lib/proposal-status";
-import { listProposalsByDealId, proposalStorageMode, upsertProposalConcept } from "@/lib/proposal-store";
+import { allocateProposalId, listProposalsByDealId, proposalStorageMode, upsertProposalConcept } from "@/lib/proposal-store";
 
 export const runtime = "nodejs";
 
@@ -147,7 +147,10 @@ export async function POST(request: Request) {
           id: openPipedriveConcept.proposal.id,
           quoteNumber: openPipedriveConcept.proposal.quoteNumber ?? openPipedriveConcept.proposal.id
         }
-      : fromPipedrive;
+      : await (async () => {
+          const newId = await allocateProposalId(dealId);
+          return { ...fromPipedrive, id: newId, quoteNumber: newId };
+        })();
 
     logWebhook("UPSERT_STARTED", {
       dealId,

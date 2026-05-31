@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchPipedriveDealBundle, mapPipedriveBundleToProposal } from "@/lib/pipedrive";
-import { upsertProposalConcept } from "@/lib/proposal-store";
+import { allocateProposalId, upsertProposalConcept } from "@/lib/proposal-store";
 
 export const runtime = "nodejs";
 
@@ -17,7 +17,9 @@ export async function POST(request: Request) {
 
     console.info("[pipedrive:create-concept] start", { dealId });
     const bundle = await fetchPipedriveDealBundle(dealId);
-    const proposal = await mapPipedriveBundleToProposal(dealId, bundle);
+    const fromPipedrive = await mapPipedriveBundleToProposal(dealId, bundle);
+    const newId = await allocateProposalId(dealId);
+    const proposal = { ...fromPipedrive, id: newId, quoteNumber: newId };
     const result = await upsertProposalConcept(proposal, "webhook");
     console.info("[pipedrive:create-concept] gelukt", { dealId, proposalId: result.proposal.id });
 

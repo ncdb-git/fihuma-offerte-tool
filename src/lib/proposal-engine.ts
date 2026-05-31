@@ -1,4 +1,3 @@
-import { generateProposalId } from "@/lib/proposal-store-ids";
 import { Advisor, Customer, IsdeSubsidyStatus, Measure, MoneyLine, Proposal } from "@/lib/types";
 
 export const OFFER_VALID_DAYS = 14;
@@ -742,8 +741,8 @@ export function createPlaceholderMeasure(): Measure {
 }
 
 /** Handmatige offerte: lege NAW, generieke preview, geen Pipedrive-koppeling. */
-export function createBlankManualProposal(): Proposal {
-  const proposalId = generateProposalId("manual");
+/** Id wordt gezet door allocateProposalId vóór opslaan. */
+export function createBlankManualProposal(proposalId = "FIH-MAN-PENDING"): Proposal {
   return sanitizeProposalCopy({
     id: proposalId,
     quoteNumber: proposalId,

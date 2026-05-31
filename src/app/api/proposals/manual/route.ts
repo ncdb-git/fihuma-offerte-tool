@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { createBlankManualProposal } from "@/lib/proposal-engine";
-import { upsertProposalConcept } from "@/lib/proposal-store";
+import { allocateProposalId, upsertProposalConcept } from "@/lib/proposal-store";
 
 export const runtime = "nodejs";
 
 export async function POST() {
   try {
-    const proposal = createBlankManualProposal();
+    const newId = await allocateProposalId();
+    const proposal = createBlankManualProposal(newId);
     const result = await upsertProposalConcept(proposal, "advisor");
     return NextResponse.json({
       ok: true,

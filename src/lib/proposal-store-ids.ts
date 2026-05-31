@@ -3,15 +3,16 @@ export function isPipedriveDealId(dealId: string) {
   return Boolean(normalized && normalized !== "demo" && /^\d+$/.test(normalized));
 }
 
-/** @deprecated Gebruik generateProposalId — meerdere offertes per deal zijn toegestaan. */
+/** @deprecated Gebruik proposalDisplayNumber — historische id zonder sequence. */
 export function pipedriveRecordId(dealId: string) {
   return `FIH-${dealId}`;
 }
 
+/** @deprecated Gebruik allocateProposalId uit proposal-store. */
 export function generateProposalId(dealId: string) {
-  const suffix = Date.now().toString(36).slice(-6);
-  if (isPipedriveDealId(dealId)) return `FIH-${dealId}-${suffix}`;
-  return `FIH-manual-${suffix}`;
+  if (isPipedriveDealId(dealId)) return `FIH-${dealId.trim()}-01`;
+  const year = new Date().getFullYear();
+  return `FIH-MAN-${year}-0001`;
 }
 
 export function storageKeyForProposal(proposal: { id: string }) {
