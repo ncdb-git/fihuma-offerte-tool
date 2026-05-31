@@ -1,3 +1,10 @@
+import {
+  calculateDakCombinedGross,
+  dakSquareMetersForSubsidy,
+  defaultDakCombination,
+  isIsofastProductKey,
+  normalizeDakCombination
+} from "@/lib/dak-combination";
 import { Advisor, Customer, IsdeSubsidyStatus, Measure, MoneyLine, Proposal } from "@/lib/types";
 
 export const OFFER_VALID_DAYS = 14;
@@ -249,10 +256,13 @@ export function isdeSubsidyExplanation(status: IsdeSubsidyStatus) {
   return "Voor deze maatregel is een ISDE-subsidie van toepassing op basis van een uitgevoerde verduurzamingsmaatregel.";
 }
 
-export function calculateIsdeSubsidy(measure: Pick<Measure, "type" | "squareMeters" | "subsidyStatus">) {
+export function calculateIsdeSubsidy(measure: Pick<Measure, "type" | "squareMeters" | "subsidyStatus" | "dakCombination">) {
   const status = measure.subsidyStatus ?? "single";
   const rule = subsidyRules[measure.type];
-  const squareMeters = Math.max(0, Number(measure.squareMeters) || 0);
+  let squareMeters = Math.max(0, Number(measure.squareMeters) || 0);
+  if (measure.type === "dak" && measure.dakCombination) {
+    squareMeters = dakSquareMetersForSubsidy(measure as Measure);
+  }
   const eligibleSquareMeters = squareMeters < rule.min ? 0 : Math.min(squareMeters, rule.max);
   const rate = status === "single" ? rule.single : rule.double;
   const amount = Math.round(eligibleSquareMeters * rate * 100) / 100;
@@ -310,12 +320,51 @@ export function applyAutomaticIsdeSubsidy(measure: Measure, nipEuro = 0): Measur
 }
 
 export function normalizeMeasure(measure: Measure): Measure {
-  return {
+  const next = {
     ...measure,
     adjustments: measure.adjustments ?? [],
     extraWork: measure.extraWork ?? [],
     subsidies: measure.subsidies ?? []
   };
+  if (next.type === "dak" && /isofast/i.test(next.productName)) {
+    return { ...next, dakCombination: normalizeDakCombination(next) };
+  }
+  if (next.dakCombination) {
+    const { dakCombination: _, ...without } = next;
+    return without;
+  }
+  return next;
+}
+
+export function applyDakCombinationToMeasure(
+  measure: Measure,
+  productKey: string,
+  extraWork: MoneyLine[],
+  nipEuro: number
+): Measure {
+  if (measure.type !== "dak" || !isIsofastProductKey(productKey)) {
+    return measure;
+  }
+
+  const combo = normalizeDakCombination(measure);
+  const grossInvestment = calculateDakCombinedGross(measure, productKey);
+  const withGross = {
+    ...measure,
+    grossInvestment,
+    extraWork,
+    dakCombination: combo
+  };
+  const isde = calculateIsdeSubsidy({
+    ...withGross,
+    squareMeters: dakSquareMetersForSubsidy(withGross)
+  });
+  const subsidies = configuratorSubsidies(
+    isde.amount,
+    nipEuro,
+    `ISDE subsidie (${isde.eligibleSquareMeters} m² × ${money(isde.rate)})`
+  );
+  const next: Measure = { ...withGross, subsidies, netInvestment: 0 };
+  return { ...next, netInvestment: calculateNetInvestment(next) };
 }
 
 export function measureHasPricing(measure: Measure) {

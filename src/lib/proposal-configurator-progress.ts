@@ -1,4 +1,6 @@
+import { dakTotalSquareMeters, formatDakProductSummary, isIsofastProductKey } from "@/lib/dak-combination";
 import {
+  getProductKeyForMeasure,
   isMeasureDraft,
   measureHasPricing,
   MEASURE_TYPE_LABELS,
@@ -74,10 +76,15 @@ export function buildDashboardConceptSnapshot(proposal: Proposal): DashboardConc
   const netTotal = proposalDashboardNetTotal(proposal);
 
   const measureTypeLabel = measure ? MEASURE_TYPE_LABELS[measure.type] : "Maatregel nog te kiezen";
-  const squareMetersLabel =
-    measure && measure.squareMeters > 0 ? `${measure.squareMeters} m²` : "— m²";
+  const productKey = measure ? getProductKeyForMeasure(measure) : "";
+  const totalM2 = measure && measure.squareMeters > 0 ? dakTotalSquareMeters(measure) : 0;
+  const squareMetersLabel = totalM2 > 0 ? `${totalM2} m²` : "— m²";
   const productName =
-    measure && !isMeasureDraft(measure) ? measure.productName.trim() || "—" : "Nog te kiezen";
+    measure && !isMeasureDraft(measure)
+      ? measure.type === "dak" && isIsofastProductKey(productKey)
+        ? formatDakProductSummary(measure, productKey)
+        : measure.productName.trim() || "—"
+      : "Nog te kiezen";
 
   let amountLabel = "—";
   if (netTotal !== null) {

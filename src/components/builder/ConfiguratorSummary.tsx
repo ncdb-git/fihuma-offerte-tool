@@ -1,8 +1,10 @@
 "use client";
 
+import { getDakInvestmentLines, isIsofastProductKey } from "@/lib/dak-combination";
 import {
   calculateIsdeSubsidy,
   formatCustomerSalutation,
+  getProductKeyForMeasure,
   measureAdjustmentsTotal,
   measureBrutoTotal,
   measureExtraWorkTotal,
@@ -72,7 +74,21 @@ export function ConfiguratorSummary({ proposal }: { proposal: Proposal }) {
             <h3 className="text-base font-black text-fihuma-green">{MEASURE_TYPE_LABELS[measure.type]}</h3>
             <p className="mt-1 text-sm font-bold text-[#17221d]">{measure.productName}</p>
             <ul className="mt-3 space-y-1 text-sm text-[#4a5751]">
-              <li>• {measure.squareMeters} m²</li>
+              {(() => {
+                const key = getProductKeyForMeasure(measure);
+                const dakLines =
+                  measure.type === "dak" && isIsofastProductKey(key)
+                    ? getDakInvestmentLines(measure, key)
+                    : null;
+                if (dakLines?.length) {
+                  return dakLines.map((line) => (
+                    <li key={line.id}>
+                      • {line.squareMeters} m² {line.productName} — {money(line.amount)}
+                    </li>
+                  ));
+                }
+                return <li>• {measure.squareMeters} m²</li>;
+              })()}
             </ul>
             {measure.extraWork.length > 0 ? (
               <div className="mt-3 rounded-lg border border-fihuma-line bg-white p-3">

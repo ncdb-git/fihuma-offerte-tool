@@ -1,7 +1,9 @@
+import { getDakInvestmentLines, isIsofastProductKey } from "@/lib/dak-combination";
 import {
   calculateIsdeSubsidy,
   formatCustomerSalutation,
   formatLetterGreeting,
+  getProductKeyForMeasure,
   isMeasureDraft,
   measureAdjustmentsTotal,
   measureBrutoTotal,
@@ -334,6 +336,11 @@ function InvestmentTable({ measure, paymentTerms }: { measure: Measure; paymentT
   const adjustmentsTotal = measureAdjustmentsTotal(measure);
   const payableToFihuma = brutoTotal + adjustmentsTotal;
   const showDepositSchedule = paymentTerms === PAYMENT_TERM_OPTIONS[0].text;
+  const productKey = getProductKeyForMeasure(measure);
+  const dakLines =
+    measure.type === "dak" && isIsofastProductKey(productKey)
+      ? getDakInvestmentLines(measure, productKey)
+      : null;
 
   return (
     <div className="investment-wrap investment-wrap--stacked">
@@ -341,12 +348,23 @@ function InvestmentTable({ measure, paymentTerms }: { measure: Measure; paymentT
         <p className="investment-card__title">Prijsopbouw</p>
 
         <div className="investment-mini-list">
-          <div>
-            <span>
-              {measure.squareMeters} m² {measure.productName} {measure.title.toLowerCase()}
-            </span>
-            <strong>{money(measure.grossInvestment)}</strong>
-          </div>
+          {dakLines && dakLines.length > 0
+            ? dakLines.map((line) => (
+                <div key={line.id}>
+                  <span>
+                    {line.label} — {line.squareMeters} m²
+                  </span>
+                  <strong>{money(line.amount)}</strong>
+                </div>
+              ))
+            : (
+              <div>
+                <span>
+                  {measure.squareMeters} m² {measure.productName} {measure.title.toLowerCase()}
+                </span>
+                <strong>{money(measure.grossInvestment)}</strong>
+              </div>
+            )}
           {measure.extraWork.map((row) => (
             <div key={row.id}>
               <span>{row.description}</span>
@@ -427,7 +445,16 @@ function MeasureBlock({ measure }: { measure: Measure }) {
           </div>
           <div className="spec-dl__row">
             <dt>Oppervlakte</dt>
-            <dd>{measure.squareMeters} m²</dd>
+            <dd>
+              {measure.type === "dak" && measure.dakCombination
+                ? `${measure.squareMeters} m² PIF Isofast${
+                    measure.dakCombination.unfinishedProduct !== "none" &&
+                    measure.dakCombination.unfinishedSquareMeters > 0
+                      ? ` + ${measure.dakCombination.unfinishedSquareMeters} m² onafgewerkt`
+                      : ""
+                  }`
+                : `${measure.squareMeters} m²`}
+            </dd>
           </div>
           <div className="spec-dl__row">
             <dt>Isolatiewaarde</dt>

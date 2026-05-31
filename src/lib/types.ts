@@ -47,6 +47,29 @@ export type MoneyLine = {
   amount: number;
 };
 
+/** Onafgewerkt dakdeel naast PIF Isofast (knieschot, laag dak, etc.). */
+export type DakUnfinishedProduct = "none" | "roof35" | "roof40";
+
+export type DakCombinationRates = {
+  isofast: number;
+  roof35: number;
+  roof40: number;
+};
+
+export type DakCombination = {
+  unfinishedProduct: DakUnfinishedProduct;
+  unfinishedSquareMeters: number;
+  ratesPerM2: DakCombinationRates;
+};
+
+export type DakInvestmentLine = {
+  id: string;
+  label: string;
+  productName: string;
+  squareMeters: number;
+  amount: number;
+};
+
 export type Measure = {
   id: string;
   type: MeasureType;
@@ -68,6 +91,8 @@ export type Measure = {
   subsidyStatus?: IsdeSubsidyStatus;
   grossInvestment: number;
   netInvestment: number;
+  /** Alleen bij dak + PIF Isofast: combinatie met onafgewerkt ROOF-deel. */
+  dakCombination?: DakCombination;
 };
 
 export type Proposal = {
