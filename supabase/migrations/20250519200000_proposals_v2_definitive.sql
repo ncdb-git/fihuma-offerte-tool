@@ -134,14 +134,16 @@ alter table public.proposals alter column updated_at set not null;
 -- Optionele oude kolommen niet meer gebruikt door de app (blijven staan, geen conflict)
 -- label, pdf_url, archived_at, id_legacy_text
 
--- Unieke Pipedrive deal
+-- Uniek per offerte (meerdere rijen per Pipedrive-deal toegestaan)
 drop index if exists public.proposals_pipedrive_deal_id_uidx;
-create unique index if not exists proposals_pipedrive_deal_id_uidx
+create unique index if not exists proposals_proposal_id_uidx
+  on public.proposals (proposal_id);
+
+create index if not exists proposals_pipedrive_deal_id_idx
   on public.proposals (pipedrive_deal_id);
 
 create index if not exists proposals_status_idx on public.proposals (status);
 create index if not exists proposals_updated_at_idx on public.proposals (updated_at desc);
-create index if not exists proposals_proposal_id_idx on public.proposals (proposal_id);
 
 -- PostgREST schema cache
 notify pgrst, 'reload schema';

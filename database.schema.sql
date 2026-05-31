@@ -18,9 +18,11 @@ create table if not exists public.proposals (
   updated_at timestamptz not null default now()
 );
 
-create unique index if not exists proposals_pipedrive_deal_id_uidx
+create unique index if not exists proposals_proposal_id_uidx
+  on public.proposals (proposal_id);
+
+create index if not exists proposals_pipedrive_deal_id_idx
   on public.proposals (pipedrive_deal_id);
 
 create index if not exists proposals_status_idx on public.proposals (status);
 create index if not exists proposals_updated_at_idx on public.proposals (updated_at desc);
-create index if not exists proposals_proposal_id_idx on public.proposals (proposal_id);

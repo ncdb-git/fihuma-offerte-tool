@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchPipedriveDealBundle, mapPipedriveBundleToProposal } from "@/lib/pipedrive";
-import { listProposalsByDealId, upsertProposalConcept } from "@/lib/proposal-store";
+import { upsertProposalConcept } from "@/lib/proposal-store";
 
 export const runtime = "nodejs";
 
@@ -9,11 +9,6 @@ export async function POST(request: Request) {
     const { dealId } = (await request.json()) as { dealId?: string };
     if (!dealId) {
       return NextResponse.json({ ok: false, error: "dealId ontbreekt." }, { status: 400 });
-    }
-
-    const existing = await listProposalsByDealId(dealId);
-    if (existing.length > 0) {
-      return NextResponse.json({ ok: true, action: "existing", proposalId: existing[0].proposal.id, count: existing.length });
     }
 
     if (!process.env.PIPEDRIVE_API_TOKEN) {

@@ -177,12 +177,19 @@ export function logSupabaseError(error: unknown, payload: Record<string, unknown
 export function formatSupabaseError(error: unknown): string {
   const err = error as { code?: string; message?: string; details?: string; hint?: string };
   const message = err.message ?? String(error);
+  const detail = `${message} ${err.details ?? ""} ${err.hint ?? ""}`.toLowerCase();
 
   if (err.code === "23505") {
-    return "Deze offerte bestaat al in de database. Voer de migratie supabase/migrations/20250520120000_proposals_multi_per_deal.sql uit als u meerdere offertes per klant nodig heeft.";
+    if (detail.includes("proposal_id") || detail.includes("proposals_proposal_id")) {
+      return "Deze offerte bestaat al (proposal_id). Vernieuw de pagina of open de offerte via het dashboard.";
+    }
+    if (detail.includes("pipedrive_deal_id") || detail.includes("proposals_pipedrive_deal_id")) {
+      return "De database staat nog maar één rij per Pipedrive-deal toe. Verwijder de unique index proposals_pipedrive_deal_id_uidx; uniek is alleen proposal_id.";
+    }
+    return `Dubbele waarde in de database: ${message}`;
   }
   if (message.includes("no unique or exclusion constraint") && message.includes("ON CONFLICT")) {
-    return "Database-migratie ontbreekt: voer supabase/migrations/20250520120000_proposals_multi_per_deal.sql uit in Supabase.";
+    return "Unique index op proposal_id ontbreekt. Maak proposals_proposal_id_uidx aan op public.proposals (proposal_id).";
   }
   if (err.code === "PGRST204" || message.includes("Could not find")) {
     return `Database-kolom ontbreekt. Controleer of migratie supabase/migrations/20250519200000_proposals_v2_definitive.sql is gedraaid. (${message})`;
@@ -198,10 +205,7 @@ function latestProposalRowQuery(client: SupabaseClient) {
   return client.from(PROPOSALS_TABLE).select(PROPOSAL_ROW_SELECT).order("updated_at", { ascending: false }).limit(1);
 }
 
-export async function findProposalRowByDealId(client: SupabaseClient, dealId: string) {
-  return latestProposalRowQuery(client).eq("pipedrive_deal_id", dealId).maybeSingle();
-}
-
+/** Zoekt uitsluitend op UUID of proposal_id — niet op pipedrive_deal_id (meerdere offertes per deal). */
 export async function findProposalRowByLookupId(client: SupabaseClient, lookupId: string) {
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (uuidPattern.test(lookupId)) {
@@ -210,12 +214,5 @@ export async function findProposalRowByLookupId(client: SupabaseClient, lookupId
     if (byUuid.error) return byUuid;
   }
 
-  const byProposalId = await latestProposalRowQuery(client).eq("proposal_id", lookupId).maybeSingle();
-  if (byProposalId.data || byProposalId.error) return byProposalId;
-
-  if (/^\d+$/.test(lookupId)) {
-    return latestProposalRowQuery(client).eq("pipedrive_deal_id", lookupId).maybeSingle();
-  }
-
-  return { data: null, error: null };
+  return latestProposalRowQuery(client).eq("proposal_id", lookupId).maybeSingle();
 }

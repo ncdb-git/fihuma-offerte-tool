@@ -15,7 +15,6 @@ import type { ProposalRecord, UpsertProposalResult, UpsertSource, UpsertStorageR
 import { Proposal, ProposalStatus } from "@/lib/types";
 import {
   buildSupabaseProposalPayload,
-  findProposalRowByDealId,
   findProposalRowByLookupId,
   formatSupabaseError,
   logSupabaseError,
