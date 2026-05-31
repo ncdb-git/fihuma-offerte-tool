@@ -328,37 +328,44 @@ function ConceptOfferRow({
   const { concept } = row;
   const tone = progressToneClasses(concept.progress.tone);
 
+  const metaParts = [concept.squareMetersLabel, concept.productName, concept.amountLabel].filter(Boolean);
+
   return (
     <div className="grid gap-3 rounded-lg border border-fihuma-line bg-white px-4 py-3 lg:grid-cols-[1fr_auto]">
       <div className="min-w-0">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <p className="text-base font-black text-[#17221d]">{concept.measureTypeLabel}</p>
-            <p className="mt-0.5 text-sm font-semibold text-[#4a5751]">
-              {concept.squareMetersLabel}
-              <span className="text-[#64736b]"> · </span>
-              {concept.productName}
-            </p>
-            <p className="mt-1 text-lg font-black text-fihuma-green">{concept.amountLabel}</p>
-          </div>
-          <span className="rounded-full bg-fihuma-mint px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-fihuma-green">
+        <p className="text-base font-black leading-tight text-[#17221d]">{concept.measureTypeLabel}</p>
+
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span className="rounded-md border border-fihuma-line bg-[#f4f7f5] px-2.5 py-1 text-xs font-black text-[#17221d]">
             {row.status}
           </span>
+          <span className={`rounded-md border px-2.5 py-1 text-xs font-black ${tone.badge}`}>
+            {concept.progress.emoji} {concept.progress.label}
+            <span className="ml-1.5 font-semibold opacity-90">
+              · {concept.progress.completedSteps}/{concept.progress.totalSteps}
+            </span>
+          </span>
         </div>
 
-        <div className={`mt-3 inline-flex flex-wrap items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-bold ${tone.badge}`}>
-          <span>
-            {concept.progress.emoji} {concept.progress.label}
-          </span>
-          <span className="font-semibold opacity-80">
-            {concept.progress.completedSteps} van {concept.progress.totalSteps} stappen voltooid
-          </span>
-        </div>
-        <div className="mt-2 h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-[#eef2ed]">
+        <div className="mt-2 h-1.5 w-full max-w-sm overflow-hidden rounded-full bg-[#eef2ed]">
           <div className={`h-full rounded-full transition-all ${tone.bar}`} style={{ width: `${concept.progress.percent}%` }} />
         </div>
+        <p className="mt-1 text-[11px] font-medium text-[#64736b]">
+          {concept.progress.completedSteps} van {concept.progress.totalSteps} stappen voltooid
+        </p>
 
-        <p className="mt-2 text-xs text-[#64736b]">
+        {metaParts.length > 0 ? (
+          <p className="mt-2 text-xs font-medium text-[#8a9690]">
+            {metaParts.map((part, index) => (
+              <span key={`${part}-${index}`}>
+                {index > 0 ? <span className="mx-1.5 text-[#c5cdc8]">•</span> : null}
+                {part}
+              </span>
+            ))}
+          </p>
+        ) : null}
+
+        <p className="mt-1.5 text-[11px] text-[#a3afa8]">
           {row.displayNumber} · Adviseur: {row.advisorLabel} · Aangemaakt {nlDate(row.createdAt)} · Bijgewerkt{" "}
           {formatRelativeNl(row.updatedAt)}
         </p>
