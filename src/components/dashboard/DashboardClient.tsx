@@ -3,7 +3,8 @@
 import { Archive, ChevronDown, ChevronRight, Copy, Plus, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { groupDashboardProposals, isManualGroup, type DashboardCustomerGroup } from "@/lib/dashboard-groups";
+import { groupDashboardProposals, isManualGroup, type DashboardCustomerGroup, type DashboardProposalRow } from "@/lib/dashboard-groups";
+import { progressToneClasses } from "@/lib/proposal-configurator-progress";
 import { advisors } from "@/lib/proposal-engine";
 import { normalizeProposalStatus } from "@/lib/proposal-status";
 import { isPipedriveDealId } from "@/lib/proposal-store-ids";
@@ -308,6 +309,110 @@ type CustomerGroupAccordionProps = {
   onDelete: (id: string) => void;
 };
 
+function ConceptOfferRow({
+  row,
+  busyId,
+  onDuplicate,
+  onArchive,
+  onDelete
+}: {
+  row: DashboardProposalRow;
+  busyId: string | null;
+  onDuplicate: (id: string) => void;
+  onArchive: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const router = useRouter();
+  const href = proposalHref(row.proposal);
+  const disabled = busyId === row.proposal.id;
+  const { concept } = row;
+  const tone = progressToneClasses(concept.progress.tone);
+
+  return (
+    <div className="grid gap-3 rounded-lg border border-fihuma-line bg-white px-4 py-3 lg:grid-cols-[1fr_auto]">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-base font-black text-[#17221d]">{concept.measureTypeLabel}</p>
+            <p className="mt-0.5 text-sm font-semibold text-[#4a5751]">
+              {concept.squareMetersLabel}
+              <span className="text-[#64736b]"> · </span>
+              {concept.productName}
+            </p>
+            <p className="mt-1 text-lg font-black text-fihuma-green">{concept.amountLabel}</p>
+          </div>
+          <span className="rounded-full bg-fihuma-mint px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-fihuma-green">
+            {row.status}
+          </span>
+        </div>
+
+        <div className={`mt-3 inline-flex flex-wrap items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-bold ${tone.badge}`}>
+          <span>
+            {concept.progress.emoji} {concept.progress.label}
+          </span>
+          <span className="font-semibold opacity-80">
+            {concept.progress.completedSteps} van {concept.progress.totalSteps} stappen voltooid
+          </span>
+        </div>
+        <div className="mt-2 h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-[#eef2ed]">
+          <div className={`h-full rounded-full transition-all ${tone.bar}`} style={{ width: `${concept.progress.percent}%` }} />
+        </div>
+
+        <p className="mt-2 text-xs text-[#64736b]">
+          {row.displayNumber} · Adviseur: {row.advisorLabel} · Aangemaakt {nlDate(row.createdAt)} · Bijgewerkt{" "}
+          {formatRelativeNl(row.updatedAt)}
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-start gap-1.5 lg:justify-end">
+        <button
+          className="rounded-md border border-fihuma-line bg-white px-2 py-1.5 text-[11px] font-black"
+          disabled={disabled}
+          onClick={() => router.push(href)}
+          type="button"
+        >
+          Openen
+        </button>
+        <button
+          className="rounded-md border border-fihuma-line bg-white px-2 py-1.5 text-[11px] font-black"
+          disabled={disabled}
+          onClick={() => router.push(href)}
+          type="button"
+        >
+          Bewerken
+        </button>
+        <button
+          className="rounded-md border border-fihuma-line bg-white p-1.5"
+          disabled={disabled}
+          onClick={() => onDuplicate(row.proposal.id)}
+          title="Dupliceren"
+          type="button"
+        >
+          <Copy size={15} />
+        </button>
+        <button
+          className="rounded-md border border-fihuma-line bg-white p-1.5"
+          disabled={disabled}
+          onClick={() => onArchive(row.proposal.id)}
+          title="Archiveren"
+          type="button"
+        >
+          <Archive size={15} />
+        </button>
+        <button
+          className="rounded-md border border-red-200 bg-red-50 p-1.5 text-red-700"
+          disabled={disabled}
+          onClick={() => onDelete(row.proposal.id)}
+          title="Verwijderen"
+          type="button"
+        >
+          <Trash2 size={15} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CustomerGroupAccordion({
   group,
   expanded,
@@ -371,73 +476,16 @@ function CustomerGroupAccordion({
         <div className="border-t border-fihuma-line bg-[#fbfcfa] px-5 py-3">
           <p className="mb-2 text-xs font-black uppercase tracking-wider text-[#64736b]">Conceptoffertes</p>
           <div className="space-y-2">
-            {group.proposals.map((row) => {
-              const href = proposalHref(row.proposal);
-              const disabled = busyId === row.proposal.id;
-              return (
-                <div
-                  className="grid gap-2 rounded-lg border border-fihuma-line bg-white px-4 py-3 md:grid-cols-[1fr_auto]"
-                  key={row.proposal.id}
-                >
-                  <div>
-                    <p className="text-sm font-black text-[#17221d]">
-                      {row.title} <span className="font-bold text-[#64736b]">· {row.measureLabel}</span>
-                    </p>
-                    <p className="mt-0.5 text-xs text-[#64736b]">
-                      {row.displayNumber} · {row.status} · Adviseur: {row.advisorLabel}
-                    </p>
-                    <p className="mt-0.5 text-xs text-[#64736b]">
-                      Aangemaakt {nlDate(row.createdAt)} · Bijgewerkt {formatRelativeNl(row.updatedAt)}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <button
-                      className="rounded-md border border-fihuma-line bg-white px-2 py-1.5 text-[11px] font-black"
-                      disabled={disabled}
-                      onClick={() => router.push(href)}
-                      type="button"
-                    >
-                      Openen
-                    </button>
-                    <button
-                      className="rounded-md border border-fihuma-line bg-white px-2 py-1.5 text-[11px] font-black"
-                      disabled={disabled}
-                      onClick={() => router.push(href)}
-                      type="button"
-                    >
-                      Bewerken
-                    </button>
-                    <button
-                      className="rounded-md border border-fihuma-line bg-white p-1.5"
-                      disabled={disabled}
-                      onClick={() => onDuplicate(row.proposal.id)}
-                      title="Dupliceren"
-                      type="button"
-                    >
-                      <Copy size={15} />
-                    </button>
-                    <button
-                      className="rounded-md border border-fihuma-line bg-white p-1.5"
-                      disabled={disabled}
-                      onClick={() => onArchive(row.proposal.id)}
-                      title="Archiveren"
-                      type="button"
-                    >
-                      <Archive size={15} />
-                    </button>
-                    <button
-                      className="rounded-md border border-red-200 bg-red-50 p-1.5 text-red-700"
-                      disabled={disabled}
-                      onClick={() => onDelete(row.proposal.id)}
-                      title="Verwijderen"
-                      type="button"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+            {group.proposals.map((row) => (
+              <ConceptOfferRow
+                busyId={busyId}
+                key={row.proposal.id}
+                onArchive={onArchive}
+                onDelete={onDelete}
+                onDuplicate={onDuplicate}
+                row={row}
+              />
+            ))}
           </div>
         </div>
       ) : null}

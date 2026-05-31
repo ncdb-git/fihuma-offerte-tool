@@ -1,3 +1,4 @@
+import { buildDashboardConceptSnapshot, type DashboardConceptSnapshot } from "@/lib/proposal-configurator-progress";
 import { advisorFirstName, proposalDisplayNumber } from "@/lib/proposal-numbering";
 import { proposalDisplayTitle } from "@/lib/proposal-engine";
 import { normalizeProposalStatus } from "@/lib/proposal-status";
@@ -13,6 +14,7 @@ export type DashboardProposalRow = {
   displayNumber: string;
   measureLabel: string;
   advisorLabel: string;
+  concept: DashboardConceptSnapshot;
 };
 
 export type DashboardCustomerGroup = {
@@ -97,7 +99,8 @@ export function groupDashboardProposals(records: ProposalRecordInput[]): Dashboa
     status: normalizeProposalStatus(record.proposal.status),
     displayNumber: proposalDisplayNumber(record.proposal),
     measureLabel: measureLabel(record.proposal),
-    advisorLabel: advisorFirstName(record.proposal.advisor?.name)
+    advisorLabel: advisorFirstName(record.proposal.advisor?.name),
+    concept: buildDashboardConceptSnapshot(record.proposal)
   }));
 
   const map = new Map<string, DashboardProposalRow[]>();
