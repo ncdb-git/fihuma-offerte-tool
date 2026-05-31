@@ -76,14 +76,12 @@ export type EnsureProposalResult = {
   siblings: Awaited<ReturnType<typeof listProposalsByDealId>>;
 };
 
-/** Laadt bestaand concept, maakt nieuw concept aan, of opent specifieke offerte. */
+/**
+ * Laadt een offerte op proposal_id, of maakt een nieuw concept aan.
+ * Meerdere offertes per deal zijn toegestaan — er is geen “één offerte per deal”-blokkade.
+ */
 export async function ensureProposalForDeal(dealId: string, options: EnsureOptions = {}): Promise<EnsureProposalResult> {
-  if (options.createNew) {
-    const proposal = await createNewProposalForDeal(dealId);
-    return { proposal, siblings: await listProposalsByDealId(dealId) };
-  }
-
-  if (options.proposalId) {
+  if (options.proposalId && !options.createNew) {
     const byId = await getProposalConceptById(options.proposalId);
     if (byId) {
       const backfill = await backfillAddressFromPipedrive(byId, dealId);
@@ -95,17 +93,6 @@ export async function ensureProposalForDeal(dealId: string, options: EnsureOptio
     }
   }
 
-  const siblings = await listProposalsByDealId(dealId);
-  const existing = siblings[0]?.proposal;
-  if (existing && !options.createNew) {
-    const backfill = await backfillAddressFromPipedrive(existing, dealId);
-    if (backfill.updated) {
-      const result = await upsertProposalConcept(backfill.proposal, "advisor");
-      return { proposal: result.proposal, siblings: await listProposalsByDealId(dealId) };
-    }
-    return { proposal: existing, siblings };
-  }
-
-  const created = await createNewProposalForDeal(dealId);
-  return { proposal: created, siblings: await listProposalsByDealId(dealId) };
+  const proposal = await createNewProposalForDeal(dealId);
+  return { proposal, siblings: await listProposalsByDealId(dealId) };
 }

@@ -183,10 +183,7 @@ export function formatSupabaseError(error: unknown): string {
     if (detail.includes("proposal_id") || detail.includes("proposals_proposal_id")) {
       return "Deze offerte bestaat al (proposal_id). Vernieuw de pagina of open de offerte via het dashboard.";
     }
-    if (detail.includes("pipedrive_deal_id") || detail.includes("proposals_pipedrive_deal_id")) {
-      return "De database staat nog maar één rij per Pipedrive-deal toe. Verwijder de unique index proposals_pipedrive_deal_id_uidx; uniek is alleen proposal_id.";
-    }
-    return `Dubbele waarde in de database: ${message}`;
+    return `Dubbele waarde in de database (uniek is proposal_id): ${message}`;
   }
   if (message.includes("no unique or exclusion constraint") && message.includes("ON CONFLICT")) {
     return "Unique index op proposal_id ontbreekt. Maak proposals_proposal_id_uidx aan op public.proposals (proposal_id).";

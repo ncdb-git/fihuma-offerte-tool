@@ -299,12 +299,6 @@ export async function listProposalsByDealId(dealId: string): Promise<ProposalRec
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-/** Meest recente concept voor een deal (backward compatible). */
-export async function getProposalConceptByDealId(dealId: string) {
-  const records = await listProposalsByDealId(dealId);
-  return records[0]?.proposal ?? null;
-}
-
 export async function getProposalConceptById(id: string) {
   const client = supabaseClient();
   if (client) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchPipedriveDealBundle, isTargetOfferStage, mapPipedriveBundleToProposal } from "@/lib/pipedrive";
+import { normalizeProposalStatus } from "@/lib/proposal-status";
 import { listProposalsByDealId, proposalStorageMode, upsertProposalConcept } from "@/lib/proposal-store";
 
 export const runtime = "nodejs";
@@ -136,11 +137,17 @@ export async function POST(request: Request) {
     logWebhook("FETCHING_PIPEDRIVE_DEAL", { dealId });
     const bundle = await fetchPipedriveDealBundle(dealId);
     const fromPipedrive = await mapPipedriveBundleToProposal(dealId, bundle);
-    const existingForDeal = await listProposalsByDealId(dealId);
-    const proposal =
-      existingForDeal.length > 0
-        ? { ...fromPipedrive, id: existingForDeal[0].proposal.id, quoteNumber: existingForDeal[0].proposal.quoteNumber ?? existingForDeal[0].proposal.id }
-        : fromPipedrive;
+    const siblings = await listProposalsByDealId(dealId);
+    const openPipedriveConcept = siblings.find(
+      (entry) => normalizeProposalStatus(entry.proposal.status) === "Nieuw vanuit Pipedrive"
+    );
+    const proposal = openPipedriveConcept
+      ? {
+          ...fromPipedrive,
+          id: openPipedriveConcept.proposal.id,
+          quoteNumber: openPipedriveConcept.proposal.quoteNumber ?? openPipedriveConcept.proposal.id
+        }
+      : fromPipedrive;
 
     logWebhook("UPSERT_STARTED", {
       dealId,
