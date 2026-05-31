@@ -49,7 +49,6 @@ export function DashboardClient() {
   const [records, setRecords] = useState<ProposalRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [storageMode, setStorageMode] = useState("");
   const [persistenceWarning, setPersistenceWarning] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -68,7 +67,6 @@ export function DashboardClient() {
       return;
     }
     setRecords(payload.data ?? []);
-    setStorageMode(payload.storageMode ?? "");
     setPersistenceWarning(payload.persistenceWarning ?? null);
     setIsLoading(false);
   }
@@ -114,9 +112,6 @@ export function DashboardClient() {
   }, [records, searchQuery, advisorFilter, statusFilter]);
 
   const customerGroups = useMemo(() => groupDashboardProposals(filteredRecords), [filteredRecords]);
-
-  const totalConcepts = filteredRecords.length;
-  const totalCustomers = customerGroups.length;
 
   function toggleGroup(groupKey: string) {
     setExpandedGroups((prev) => {
@@ -258,13 +253,6 @@ export function DashboardClient() {
           <div className="px-5 py-10 text-sm text-[#64736b]">
             Er staan nog geen deals klaar. Zet een deal in Pipedrive op ‘Offerte maken’ om hier een offerte te starten.
           </div>
-        ) : null}
-
-        {!isLoading && records.length > 0 ? (
-          <p className="border-b border-fihuma-line bg-[#fbfcfa] px-5 py-2 text-xs text-[#64736b]">
-            {totalCustomers} klant{totalCustomers === 1 ? "" : "en"} · {totalConcepts} concept{totalConcepts === 1 ? "" : "en"} · opslag:{" "}
-            {storageMode === "supabase" ? "Supabase" : "lokaal bestand"}
-          </p>
         ) : null}
 
         {!isLoading && records.length > 0 && customerGroups.length === 0 ? (
