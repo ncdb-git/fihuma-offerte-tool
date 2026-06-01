@@ -3,6 +3,7 @@ import "server-only";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { profiledLoad } from "@/lib/create-load-profiler";
 import { isArchivedStatus, normalizeProposalStatus } from "@/lib/proposal-status";
 import { nextManualProposalId, nextPipedriveProposalId } from "@/lib/proposal-numbering";
 import { isPipedriveDealId, storageKeyForProposal } from "@/lib/proposal-store-ids";
@@ -274,11 +275,13 @@ async function upsertSupabaseProposal(proposal: Proposal, source: UpsertSource, 
 /** Nieuw leesbaar offertenummer; bestaande ids blijven ongewijzigd. */
 export async function allocateProposalId(dealId = ""): Promise<string> {
   if (isPipedriveDealId(dealId)) {
-    const siblings = await listProposalsByDealId(dealId);
+    const siblings = await profiledLoad("supabase", "listProposalsByDealId (allocate)", () => listProposalsByDealId(dealId));
     return nextPipedriveProposalId(dealId, siblings.map((entry) => entry.proposal.id));
   }
 
-  const records = await listProposalRecords({ includeArchived: true, pipedriveOnly: false });
+  const records = await profiledLoad("supabase", "listProposalRecords (allocate)", () =>
+    listProposalRecords({ includeArchived: true, pipedriveOnly: false })
+  );
   const manualIds = records
     .filter((entry) => !isPipedriveDealId(entry.proposal.customer.pipedriveDealId?.trim() ?? ""))
     .map((entry) => entry.proposal.id);
@@ -287,6 +290,10 @@ export async function allocateProposalId(dealId = ""): Promise<string> {
 }
 
 export async function listProposalsByDealId(dealId: string): Promise<ProposalRecord[]> {
+  return profiledLoad("supabase", "listProposalsByDealId", async () => listProposalsByDealIdInner(dealId));
+}
+
+async function listProposalsByDealIdInner(dealId: string): Promise<ProposalRecord[]> {
   const client = supabaseClient();
   if (client) {
     const { data, error } = await client
@@ -317,6 +324,10 @@ export async function listProposalsByDealId(dealId: string): Promise<ProposalRec
 }
 
 export async function getProposalConceptById(id: string) {
+  return profiledLoad("supabase", "getProposalConceptById", async () => getProposalConceptByIdInner(id));
+}
+
+async function getProposalConceptByIdInner(id: string) {
   const client = supabaseClient();
   if (client) {
     const { data: row, error } = await findProposalRowByLookupId(client, id);
@@ -369,7 +380,9 @@ export async function upsertProposalConcept(proposal: Proposal, source: UpsertSo
   const client = supabaseClient();
   if (client) {
     try {
-      return await upsertSupabaseProposal(nextProposal, source, existingConcept);
+      return await profiledLoad("supabase", "upsertProposalConcept", () =>
+        upsertSupabaseProposal(nextProposal, source, existingConcept)
+      );
     } catch (error) {
       console.error("[proposal-store] Supabase upsert mislukt", error);
       if (isSupabaseConfigured()) {

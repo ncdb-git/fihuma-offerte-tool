@@ -102,6 +102,8 @@ export type Proposal = {
   title: string;
   subtitle: string;
   createdAt: string;
+  /** Laatste CRM-sync (ISO); bepaalt of Pipedrive opnieuw wordt opgehaald. */
+  pipedriveSyncedAt?: string | null;
   /** Optioneel: pad naar sfeerfoto in /public, bv. `/cover-sfeer.jpg` (geen tekst in beeld). */
   coverSfeerImageSrc?: string | null;
   /** Vrije offertenummer-weergave; valt terug op `id`. */

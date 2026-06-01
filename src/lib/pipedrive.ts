@@ -10,6 +10,8 @@ import {
   isolationLabelForType,
   MAIN_PRODUCTS
 } from "@/lib/proposal-engine";
+import { profiledLoad } from "@/lib/create-load-profiler";
+import { getCachedDealBundle, setCachedDealBundle } from "@/lib/pipedrive-deal-cache";
 import { resolveCustomerAddressFromBundle } from "@/lib/pipedrive-address";
 import { Customer, IsdeSubsidyStatus, MeasureType, Proposal } from "@/lib/types";
 
@@ -125,29 +127,47 @@ type PipedriveDeal = Record<string, unknown>;
 type PipedrivePerson = Record<string, unknown>;
 type PipedriveOrganization = Record<string, unknown>;
 
-export async function fetchPipedriveDealBundle(dealId: string) {
-  const deal = await pipedriveGet<PipedriveDeal>(`/deals/${dealId}`);
-  const personId = idFromReference(deal.person_id);
-  const organizationId = idFromReference(deal.org_id);
+export type PipedriveDealBundle = {
+  deal: PipedriveDeal;
+  person: PipedrivePerson;
+  organization: PipedriveOrganization;
+  meta: { personId: string; organizationId: string };
+};
 
-  if (!personId && deal.person_id) {
-    console.warn("[pipedrive] geen personId uit deal.person_id", { dealId, person_id: deal.person_id });
+export async function fetchPipedriveDealBundle(dealId: string, options?: { force?: boolean }): Promise<PipedriveDealBundle> {
+  if (!options?.force) {
+    const cached = getCachedDealBundle<PipedriveDealBundle>(dealId);
+    if (cached) return cached;
   }
+  return fetchPipedriveDealBundleUncached(dealId);
+}
 
-  const [personFromApi, personFromV2, personFromDeal, organization] = await Promise.all([
-    personId ? pipedriveGet<PipedrivePerson>(`/persons/${personId}`).catch((error) => {
-      console.warn("[pipedrive] GET /persons mislukt", { dealId, personId, error });
-      return {};
-    }) : Promise.resolve({}),
-    personId ? fetchPersonV2Flat(personId) : Promise.resolve({}),
-    pipedriveGet<PipedrivePerson>(`/deals/${dealId}/person`).catch(() => ({})),
-    organizationId ? pipedriveGet<PipedriveOrganization>(`/organizations/${organizationId}`).catch(() => ({})) : Promise.resolve({})
-  ]);
+async function fetchPipedriveDealBundleUncached(dealId: string): Promise<PipedriveDealBundle> {
+  return profiledLoad("pipedrive", "fetchPipedriveDealBundle", async () => {
+    const deal = await pipedriveGet<PipedriveDeal>(`/deals/${dealId}`);
+    const personId = idFromReference(deal.person_id);
+    const organizationId = idFromReference(deal.org_id);
 
-  // Volgorde: deal-person endpoint → v1 person → v2 person (meest complete custom fields)
-  const person = { ...(deal.person_id as PipedrivePerson), ...personFromDeal, ...personFromApi, ...personFromV2 };
+    if (!personId && deal.person_id) {
+      console.warn("[pipedrive] geen personId uit deal.person_id", { dealId, person_id: deal.person_id });
+    }
 
-  return { deal, person, organization, meta: { personId, organizationId } };
+    const [personFromApi, personFromV2, personFromDeal, organization] = await Promise.all([
+      personId ? pipedriveGet<PipedrivePerson>(`/persons/${personId}`).catch((error) => {
+        console.warn("[pipedrive] GET /persons mislukt", { dealId, personId, error });
+        return {};
+      }) : Promise.resolve({}),
+      personId ? fetchPersonV2Flat(personId) : Promise.resolve({}),
+      pipedriveGet<PipedrivePerson>(`/deals/${dealId}/person`).catch(() => ({})),
+      organizationId ? pipedriveGet<PipedriveOrganization>(`/organizations/${organizationId}`).catch(() => ({})) : Promise.resolve({})
+    ]);
+
+    const person = { ...(deal.person_id as PipedrivePerson), ...personFromDeal, ...personFromApi, ...personFromV2 };
+
+    const bundle = { deal, person, organization, meta: { personId, organizationId } };
+    setCachedDealBundle(dealId, bundle);
+    return bundle;
+  });
 }
 
 function measureTypeFromPipedrive(value: string): MeasureType {
@@ -171,9 +191,10 @@ export function isTargetOfferStage(stageId: unknown) {
 }
 
 export async function mapPipedriveBundleToProposal(dealId: string, bundle: Awaited<ReturnType<typeof fetchPipedriveDealBundle>>): Promise<Proposal> {
+  return profiledLoad("server", "mapPipedriveBundleToProposal", async () => {
   const source = { deal: bundle.deal, person: bundle.person, organization: bundle.organization };
   const fields = getPipedriveFieldMap();
-  const addressFields = await resolveCustomerAddressFromBundle(bundle);
+  const addressFields = await profiledLoad("pipedrive", "resolveCustomerAddress", () => resolveCustomerAddressFromBundle(bundle));
 
   console.info("[pipedrive] customer address resolved", {
     dealId,
@@ -202,6 +223,7 @@ export async function mapPipedriveBundleToProposal(dealId: string, bundle: Await
 
   return sanitizeProposalCopy({
     ...proposal,
+    pipedriveSyncedAt: new Date().toISOString(),
     status: "Nieuw vanuit Pipedrive",
     advisor,
     customer: {
@@ -222,6 +244,7 @@ export async function mapPipedriveBundleToProposal(dealId: string, bundle: Await
         "Naar aanleiding van uw interesse in het verduurzamen van uw woning ontvangt u hierbij onze op maat gemaakte offerte."
     },
     measures: [measure]
+  });
   });
 }
 

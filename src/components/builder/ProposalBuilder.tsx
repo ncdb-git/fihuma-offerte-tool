@@ -38,6 +38,7 @@ import {
 import { proposalDisplayTitle } from "@/lib/proposal-engine";
 import { isPipedriveDealId } from "@/lib/proposal-store-ids";
 import { Measure, MeasureType, Proposal, Salutation } from "@/lib/types";
+import { mergeAdvisorVisiblePipedriveFields } from "@/lib/pipedrive-proposal-merge";
 import { normalizeProposalStatus } from "@/lib/proposal-status";
 import { useRouter } from "next/navigation";
 
@@ -94,14 +95,18 @@ type SiblingProposal = {
 export function ProposalBuilder({
   initialProposal,
   dealId,
-  siblingProposals = []
+  siblingProposals = [],
+  pipedriveSync = null
 }: {
   initialProposal: Proposal;
   dealId?: string;
   siblingProposals?: SiblingProposal[];
+  /** Stille CRM-sync na eerste render (alleen lege/0-waarden aanvullen). */
+  pipedriveSync?: Proposal | null;
 }) {
   const router = useRouter();
   const [proposal, setProposal] = useState(initialProposal);
+  const pipedriveSyncRef = useRef<string | null>(null);
   const [step, setStepState] = useState(1);
   const skipAutosaveRef = useRef(true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -115,6 +120,14 @@ export function ProposalBuilder({
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [creatingSibling, setCreatingSibling] = useState(false);
+
+  useEffect(() => {
+    if (!pipedriveSync || pipedriveSync.id !== proposal.id) return;
+    const token = `${pipedriveSync.id}:${pipedriveSync.pipedriveSyncedAt ?? ""}`;
+    if (pipedriveSyncRef.current === token) return;
+    pipedriveSyncRef.current = token;
+    setProposal((prev) => mergeAdvisorVisiblePipedriveFields(prev, pipedriveSync));
+  }, [pipedriveSync, proposal.id]);
 
   const measure = proposal.measures[0];
   const previewDraft = measure ? isMeasureDraft(measure) : true;
