@@ -1,4 +1,4 @@
-import { formatDakProductSummary, isIsofastProductKey } from "@/lib/dak-combination";
+import { dakTotalSquareMeters, formatDakProductSummary, isIsofastProductKey } from "@/lib/dak-combination";
 import {
   getProductKeyForMeasure,
   isMeasureDraft,
@@ -78,7 +78,7 @@ export function buildDashboardConceptSnapshot(proposal: Proposal): DashboardConc
 
   const measureTypeLabel = measure ? MEASURE_TYPE_LABELS[measure.type] : "Maatregel nog te kiezen";
   const productKey = measure ? getProductKeyForMeasure(measure) : "";
-  const totalM2 = measure && measure.squareMeters > 0 ? measure.squareMeters : 0;
+  const totalM2 = measure && measure.squareMeters > 0 ? dakTotalSquareMeters(measure) : 0;
   const squareMetersLabel = totalM2 > 0 ? `${totalM2} m²` : "— m²";
   const productName =
     measure && !isMeasureDraft(measure)

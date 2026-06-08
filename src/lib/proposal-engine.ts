@@ -1,4 +1,5 @@
 import {
+  dakSquareMetersForSubsidy,
   isIsofastProductKey,
   normalizeDakCombination,
   syncDakCombinationExtraWork
@@ -254,10 +255,13 @@ export function isdeSubsidyExplanation(status: IsdeSubsidyStatus) {
   return "Voor deze maatregel is een ISDE-subsidie van toepassing op basis van een uitgevoerde verduurzamingsmaatregel.";
 }
 
-export function calculateIsdeSubsidy(measure: Pick<Measure, "type" | "squareMeters" | "subsidyStatus">) {
+export function calculateIsdeSubsidy(measure: Pick<Measure, "type" | "squareMeters" | "subsidyStatus" | "dakCombination">) {
   const status = measure.subsidyStatus ?? "single";
   const rule = subsidyRules[measure.type];
-  const squareMeters = Math.max(0, Number(measure.squareMeters) || 0);
+  let squareMeters = Math.max(0, Number(measure.squareMeters) || 0);
+  if (measure.type === "dak" && measure.dakCombination) {
+    squareMeters = dakSquareMetersForSubsidy(measure as Measure);
+  }
   const eligibleSquareMeters = squareMeters < rule.min ? 0 : Math.min(squareMeters, rule.max);
   const rate = status === "single" ? rule.single : rule.double;
   const amount = Math.round(eligibleSquareMeters * rate * 100) / 100;

@@ -24,7 +24,8 @@ export function DakCombinationPanel({ combination, isofastSquareMeters, onChange
     <section className="rounded-xl border border-fihuma-line bg-[#fbfcfa] p-3">
       <p className="text-xs font-black uppercase tracking-wide text-fihuma-green">Combinatie met onafgewerkt dakdeel</p>
       <p className="mt-1 text-[11px] leading-relaxed text-[#64736b]">
-        Bijv. knieschotten of lage dakdelen. PIF Isofast: {isofastSquareMeters || 0} m² — vul het offertebedrag apart in.
+        Bijv. knieschotten of lage dakdelen. PIF Isofast: {isofastSquareMeters || 0} m². Vul m² én offertebedrag in voor het
+        onafgewerkte deel — m² telt mee voor ISDE.
       </p>
 
       <div className="mt-3 grid gap-2">
@@ -45,6 +46,7 @@ export function DakCombinationPanel({ combination, isofastSquareMeters, onChange
                 onChange({
                   ...combination,
                   unfinishedProduct: option.value,
+                  unfinishedSquareMeters: option.value === "none" ? 0 : combination.unfinishedSquareMeters,
                   unfinishedQuoteAmount: option.value === "none" ? 0 : combination.unfinishedQuoteAmount
                 })
               }
@@ -56,26 +58,49 @@ export function DakCombinationPanel({ combination, isofastSquareMeters, onChange
       </div>
 
       {showUnfinished ? (
-        <label className="mt-3 grid gap-1">
-          <span className="text-xs font-bold text-[#64736b]">
-            Offertebedrag onafgewerkt deel ({unfinishedProductLabel(combination.unfinishedProduct)})
-          </span>
-          <NumberInput
-            className="rounded-lg border border-fihuma-line px-3 py-2 text-sm"
-            min={0}
-            step={1}
-            value={combination.unfinishedQuoteAmount}
-            onChange={(e) =>
-              onChange({
-                ...combination,
-                unfinishedQuoteAmount: Math.max(0, Number(e.target.value) || 0)
-              })
-            }
-          />
-          {combination.unfinishedQuoteAmount > 0 ? (
-            <span className="text-[11px] text-fihuma-green">Wordt toegevoegd als meerwerkregel: {money(combination.unfinishedQuoteAmount)}</span>
-          ) : null}
-        </label>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="grid gap-1">
+            <span className="text-xs font-bold text-[#64736b]">
+              m² onafgewerkt deel ({unfinishedProductLabel(combination.unfinishedProduct)})
+            </span>
+            <NumberInput
+              className="rounded-lg border border-fihuma-line px-3 py-2 text-sm"
+              min={0}
+              step={1}
+              value={combination.unfinishedSquareMeters}
+              onChange={(e) =>
+                onChange({
+                  ...combination,
+                  unfinishedSquareMeters: Math.max(0, Number(e.target.value) || 0)
+                })
+              }
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-xs font-bold text-[#64736b]">Offertebedrag onafgewerkt deel (€)</span>
+            <NumberInput
+              className="rounded-lg border border-fihuma-line px-3 py-2 text-sm"
+              min={0}
+              step={1}
+              value={combination.unfinishedQuoteAmount}
+              onChange={(e) =>
+                onChange({
+                  ...combination,
+                  unfinishedQuoteAmount: Math.max(0, Number(e.target.value) || 0)
+                })
+              }
+            />
+          </label>
+        </div>
+      ) : null}
+
+      {showUnfinished && combination.unfinishedQuoteAmount > 0 ? (
+        <p className="mt-2 text-[11px] text-fihuma-green">
+          Meerwerkregel: {money(combination.unfinishedQuoteAmount)}
+          {combination.unfinishedSquareMeters > 0
+            ? ` · ${combination.unfinishedSquareMeters} m² telt mee voor ISDE (${isofastSquareMeters + combination.unfinishedSquareMeters} m² totaal)`
+            : null}
+        </p>
       ) : null}
     </section>
   );

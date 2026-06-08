@@ -254,8 +254,13 @@ export function ProposalBuilder({
     }
     if (targetStep > 4 && isIsofastProductKey(productKey)) {
       const combo = normalizeDakCombination(measure);
-      if (combo.unfinishedProduct !== "none" && combo.unfinishedQuoteAmount <= 0) {
-        return "Vul het offertebedrag voor het onafgewerkte dakdeel in.";
+      if (combo.unfinishedProduct !== "none") {
+        if (combo.unfinishedSquareMeters <= 0) {
+          return "Vul het aantal m² voor het onafgewerkte dakdeel in.";
+        }
+        if (combo.unfinishedQuoteAmount <= 0) {
+          return "Vul het offertebedrag voor het onafgewerkte dakdeel in.";
+        }
       }
     }
     if (targetStep > 5 && brutoTotal <= 0) {
@@ -782,7 +787,9 @@ export function ProposalBuilder({
               </label>
               {isIsofastProductKey(productKey) && normalizeDakCombination(measure).unfinishedProduct !== "none" ? (
                 <p className="text-xs text-[#64736b]">
-                  Onafgewerkt dakdeel ({money(normalizeDakCombination(measure).unfinishedQuoteAmount)}) staat bij meerwerk.
+                  Onafgewerkt dakdeel: {normalizeDakCombination(measure).unfinishedSquareMeters} m² ·{" "}
+                  {money(normalizeDakCombination(measure).unfinishedQuoteAmount)} (meerwerk). ISDE over totaal m² inclusief
+                  onafgewerkt deel.
                 </p>
               ) : null}
               {measure.extraWork.length > 0 ? (

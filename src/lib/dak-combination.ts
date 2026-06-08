@@ -15,6 +15,7 @@ export function isIsofastProductKey(productKey: string) {
 export function defaultDakCombination(): DakCombination {
   return {
     unfinishedProduct: "none",
+    unfinishedSquareMeters: 0,
     unfinishedQuoteAmount: 0
   };
 }
@@ -24,31 +25,43 @@ export function normalizeDakCombination(measure: Measure): DakCombination {
   if (!raw) return defaultDakCombination();
 
   const unfinishedProduct = raw.unfinishedProduct ?? "none";
+  const unfinishedSquareMeters = Math.max(0, Number(raw.unfinishedSquareMeters) || 0);
   let unfinishedQuoteAmount = Math.max(0, Number(raw.unfinishedQuoteAmount) || 0);
 
-  // Migratie: oude m² × tarief → vast bedrag
+  // Migratie: oude m² × tarief → vast bedrag (behoud m²)
   if (
     unfinishedQuoteAmount <= 0 &&
     unfinishedProduct !== "none" &&
-    "unfinishedSquareMeters" in raw &&
-    Number((raw as { unfinishedSquareMeters?: number }).unfinishedSquareMeters) > 0
+    unfinishedSquareMeters > 0 &&
+    "ratesPerM2" in raw
   ) {
     const legacy = raw as {
-      unfinishedSquareMeters: number;
       ratesPerM2?: { roof35?: number; roof40?: number };
     };
     const rate =
       unfinishedProduct === "roof35"
         ? Number(legacy.ratesPerM2?.roof35) || LEGACY_RATES.roof35
         : Number(legacy.ratesPerM2?.roof40) || LEGACY_RATES.roof40;
-    unfinishedQuoteAmount =
-      Math.round(legacy.unfinishedSquareMeters * rate * 100) / 100;
+    unfinishedQuoteAmount = Math.round(unfinishedSquareMeters * rate * 100) / 100;
   }
 
   return {
     unfinishedProduct,
+    unfinishedSquareMeters: unfinishedProduct === "none" ? 0 : unfinishedSquareMeters,
     unfinishedQuoteAmount: unfinishedProduct === "none" ? 0 : unfinishedQuoteAmount
   };
+}
+
+/** Totaal m² voor ISDE: Isofast + onafgewerkt dakdeel. */
+export function dakSquareMetersForSubsidy(measure: Measure) {
+  const combo = normalizeDakCombination(measure);
+  const unfinished =
+    combo.unfinishedProduct === "none" ? 0 : combo.unfinishedSquareMeters;
+  return Math.max(0, measure.squareMeters) + unfinished;
+}
+
+export function dakTotalSquareMeters(measure: Measure) {
+  return dakSquareMetersForSubsidy(measure);
 }
 
 export function unfinishedProductLabel(product: DakUnfinishedProduct) {
@@ -57,9 +70,10 @@ export function unfinishedProductLabel(product: DakUnfinishedProduct) {
   return "";
 }
 
-export function unfinishedExtraWorkLabel(product: DakUnfinishedProduct) {
+export function unfinishedExtraWorkLabel(product: DakUnfinishedProduct, squareMeters = 0) {
   if (product === "none") return "";
-  return `Aanvullend dakdeel ${unfinishedProductLabel(product)}`;
+  const base = `Aanvullend dakdeel ${unfinishedProductLabel(product)}`;
+  return squareMeters > 0 ? `${base} (${squareMeters} m²)` : base;
 }
 
 export function formatDakProductSummary(measure: Measure, productKey: string) {
@@ -75,7 +89,7 @@ export function formatDakProductSummary(measure: Measure, productKey: string) {
   return `PIF Isofast + ${suffix}`;
 }
 
-/** Voegt onafgewerkt dakdeel toe als vaste meerwerkregel (quote, geen m²). */
+/** Voegt onafgewerkt dakdeel toe als vaste meerwerkregel (quote €, geen m²-prijs). */
 export function syncDakCombinationExtraWork(measure: Measure, moduleExtraWork: { id: string; description: string; amount: number }[]) {
   const combo = normalizeDakCombination(measure);
   const withoutCombo = moduleExtraWork.filter((line) => line.id !== DAK_UNFINISHED_EXTRA_ID);
@@ -88,7 +102,7 @@ export function syncDakCombinationExtraWork(measure: Measure, moduleExtraWork: {
     ...withoutCombo,
     {
       id: DAK_UNFINISHED_EXTRA_ID,
-      description: unfinishedExtraWorkLabel(combo.unfinishedProduct),
+      description: unfinishedExtraWorkLabel(combo.unfinishedProduct, combo.unfinishedSquareMeters),
       amount: combo.unfinishedQuoteAmount
     }
   ];

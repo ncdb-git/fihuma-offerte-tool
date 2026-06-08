@@ -450,8 +450,8 @@ function MeasureBlock({ measure }: { measure: Measure }) {
               {measure.type === "dak" && measure.dakCombination
                 ? `${measure.squareMeters} m² PIF Isofast${
                     measure.dakCombination.unfinishedProduct !== "none" &&
-                    measure.dakCombination.unfinishedQuoteAmount > 0
-                      ? ` + ${unfinishedProductLabel(measure.dakCombination.unfinishedProduct)}`
+                    measure.dakCombination.unfinishedSquareMeters > 0
+                      ? ` + ${measure.dakCombination.unfinishedSquareMeters} m² ${unfinishedProductLabel(measure.dakCombination.unfinishedProduct)}`
                       : ""
                   }`
                 : `${measure.squareMeters} m²`}
