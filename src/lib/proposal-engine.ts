@@ -1,9 +1,7 @@
 import {
-  calculateDakCombinedGross,
-  dakSquareMetersForSubsidy,
-  defaultDakCombination,
   isIsofastProductKey,
-  normalizeDakCombination
+  normalizeDakCombination,
+  syncDakCombinationExtraWork
 } from "@/lib/dak-combination";
 import { Advisor, Customer, IsdeSubsidyStatus, Measure, MoneyLine, Proposal } from "@/lib/types";
 
@@ -256,13 +254,10 @@ export function isdeSubsidyExplanation(status: IsdeSubsidyStatus) {
   return "Voor deze maatregel is een ISDE-subsidie van toepassing op basis van een uitgevoerde verduurzamingsmaatregel.";
 }
 
-export function calculateIsdeSubsidy(measure: Pick<Measure, "type" | "squareMeters" | "subsidyStatus" | "dakCombination">) {
+export function calculateIsdeSubsidy(measure: Pick<Measure, "type" | "squareMeters" | "subsidyStatus">) {
   const status = measure.subsidyStatus ?? "single";
   const rule = subsidyRules[measure.type];
-  let squareMeters = Math.max(0, Number(measure.squareMeters) || 0);
-  if (measure.type === "dak" && measure.dakCombination) {
-    squareMeters = dakSquareMetersForSubsidy(measure as Measure);
-  }
+  const squareMeters = Math.max(0, Number(measure.squareMeters) || 0);
   const eligibleSquareMeters = squareMeters < rule.min ? 0 : Math.min(squareMeters, rule.max);
   const rate = status === "single" ? rule.single : rule.double;
   const amount = Math.round(eligibleSquareMeters * rate * 100) / 100;
@@ -347,23 +342,19 @@ export function applyDakCombinationToMeasure(
   }
 
   const combo = normalizeDakCombination(measure);
-  const grossInvestment = calculateDakCombinedGross(measure, productKey);
-  const withGross = {
+  const syncedExtraWork = syncDakCombinationExtraWork({ ...measure, dakCombination: combo }, extraWork);
+  const withCombo: Measure = {
     ...measure,
-    grossInvestment,
-    extraWork,
-    dakCombination: combo
+    dakCombination: combo,
+    extraWork: syncedExtraWork
   };
-  const isde = calculateIsdeSubsidy({
-    ...withGross,
-    squareMeters: dakSquareMetersForSubsidy(withGross)
-  });
+  const isde = calculateIsdeSubsidy(withCombo);
   const subsidies = configuratorSubsidies(
     isde.amount,
     nipEuro,
     `ISDE subsidie (${isde.eligibleSquareMeters} m² × ${money(isde.rate)})`
   );
-  const next: Measure = { ...withGross, subsidies, netInvestment: 0 };
+  const next: Measure = { ...withCombo, subsidies, netInvestment: 0 };
   return { ...next, netInvestment: calculateNetInvestment(next) };
 }
 

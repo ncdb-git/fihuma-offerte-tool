@@ -2,11 +2,11 @@ import type { DakCombination, DakInvestmentLine, DakUnfinishedProduct, Measure }
 
 export const ISOFAST_PRODUCT_KEY = "isofast35";
 
-export const DAK_COMBINATION_DEFAULT_RATES = {
-  isofast: 52,
-  roof35: 38,
-  roof40: 40
-} as const;
+/** Vaste extraWork-regel voor onafgewerkt dakdeel (niet handmatig verwijderen). */
+export const DAK_UNFINISHED_EXTRA_ID = "dak-unfinished-combo";
+
+/** Alleen voor migratie van oude m²-tarieven. */
+const LEGACY_RATES = { roof35: 38, roof40: 40 } as const;
 
 export function isIsofastProductKey(productKey: string) {
   return productKey === ISOFAST_PRODUCT_KEY;
@@ -15,40 +15,51 @@ export function isIsofastProductKey(productKey: string) {
 export function defaultDakCombination(): DakCombination {
   return {
     unfinishedProduct: "none",
-    unfinishedSquareMeters: 0,
-    ratesPerM2: { ...DAK_COMBINATION_DEFAULT_RATES }
+    unfinishedQuoteAmount: 0
   };
 }
 
 export function normalizeDakCombination(measure: Measure): DakCombination {
   const raw = measure.dakCombination;
-  const rates = raw?.ratesPerM2 ?? DAK_COMBINATION_DEFAULT_RATES;
+  if (!raw) return defaultDakCombination();
+
+  const unfinishedProduct = raw.unfinishedProduct ?? "none";
+  let unfinishedQuoteAmount = Math.max(0, Number(raw.unfinishedQuoteAmount) || 0);
+
+  // Migratie: oude m² × tarief → vast bedrag
+  if (
+    unfinishedQuoteAmount <= 0 &&
+    unfinishedProduct !== "none" &&
+    "unfinishedSquareMeters" in raw &&
+    Number((raw as { unfinishedSquareMeters?: number }).unfinishedSquareMeters) > 0
+  ) {
+    const legacy = raw as {
+      unfinishedSquareMeters: number;
+      ratesPerM2?: { roof35?: number; roof40?: number };
+    };
+    const rate =
+      unfinishedProduct === "roof35"
+        ? Number(legacy.ratesPerM2?.roof35) || LEGACY_RATES.roof35
+        : Number(legacy.ratesPerM2?.roof40) || LEGACY_RATES.roof40;
+    unfinishedQuoteAmount =
+      Math.round(legacy.unfinishedSquareMeters * rate * 100) / 100;
+  }
+
   return {
-    unfinishedProduct: raw?.unfinishedProduct ?? "none",
-    unfinishedSquareMeters: Math.max(0, Number(raw?.unfinishedSquareMeters) || 0),
-    ratesPerM2: {
-      isofast: Number(rates.isofast) || DAK_COMBINATION_DEFAULT_RATES.isofast,
-      roof35: Number(rates.roof35) || DAK_COMBINATION_DEFAULT_RATES.roof35,
-      roof40: Number(rates.roof40) || DAK_COMBINATION_DEFAULT_RATES.roof40
-    }
+    unfinishedProduct,
+    unfinishedQuoteAmount: unfinishedProduct === "none" ? 0 : unfinishedQuoteAmount
   };
-}
-
-export function dakSquareMetersForSubsidy(measure: Measure) {
-  const combo = normalizeDakCombination(measure);
-  const unfinished =
-    combo.unfinishedProduct === "none" ? 0 : combo.unfinishedSquareMeters;
-  return Math.max(0, measure.squareMeters) + unfinished;
-}
-
-export function dakTotalSquareMeters(measure: Measure) {
-  return dakSquareMetersForSubsidy(measure);
 }
 
 export function unfinishedProductLabel(product: DakUnfinishedProduct) {
   if (product === "roof35") return "PIF ROOF35 onafgewerkt";
   if (product === "roof40") return "PIF ROOF40 onafgewerkt";
   return "";
+}
+
+export function unfinishedExtraWorkLabel(product: DakUnfinishedProduct) {
+  if (product === "none") return "";
+  return `Aanvullend dakdeel ${unfinishedProductLabel(product)}`;
 }
 
 export function formatDakProductSummary(measure: Measure, productKey: string) {
@@ -64,52 +75,37 @@ export function formatDakProductSummary(measure: Measure, productKey: string) {
   return `PIF Isofast + ${suffix}`;
 }
 
-export function calculateDakCombinedGross(measure: Measure, productKey: string) {
-  if (measure.type !== "dak" || !isIsofastProductKey(productKey)) {
-    return Math.max(0, measure.grossInvestment);
-  }
+/** Voegt onafgewerkt dakdeel toe als vaste meerwerkregel (quote, geen m²). */
+export function syncDakCombinationExtraWork(measure: Measure, moduleExtraWork: { id: string; description: string; amount: number }[]) {
   const combo = normalizeDakCombination(measure);
-  const isofastPart = Math.max(0, measure.squareMeters) * combo.ratesPerM2.isofast;
-  const unfinishedPart =
-    combo.unfinishedProduct === "roof35"
-      ? combo.unfinishedSquareMeters * combo.ratesPerM2.roof35
-      : combo.unfinishedProduct === "roof40"
-        ? combo.unfinishedSquareMeters * combo.ratesPerM2.roof40
-        : 0;
-  return Math.round((isofastPart + unfinishedPart) * 100) / 100;
+  const withoutCombo = moduleExtraWork.filter((line) => line.id !== DAK_UNFINISHED_EXTRA_ID);
+
+  if (combo.unfinishedProduct === "none" || combo.unfinishedQuoteAmount <= 0) {
+    return withoutCombo;
+  }
+
+  return [
+    ...withoutCombo,
+    {
+      id: DAK_UNFINISHED_EXTRA_ID,
+      description: unfinishedExtraWorkLabel(combo.unfinishedProduct),
+      amount: combo.unfinishedQuoteAmount
+    }
+  ];
 }
 
 export function getDakInvestmentLines(measure: Measure, productKey: string): DakInvestmentLine[] | null {
-  if (measure.type !== "dak" || !isIsofastProductKey(productKey)) {
+  if (measure.type !== "dak" || !isIsofastProductKey(productKey) || measure.grossInvestment <= 0) {
     return null;
   }
-  const combo = normalizeDakCombination(measure);
-  const lines: DakInvestmentLine[] = [
+
+  return [
     {
       id: "dak-isofast",
       label: "Dakisolatie PIF Isofast",
       productName: "PIF Isofast",
       squareMeters: measure.squareMeters,
-      amount: Math.round(measure.squareMeters * combo.ratesPerM2.isofast * 100) / 100
+      amount: measure.grossInvestment
     }
   ];
-  if (combo.unfinishedProduct === "roof35" && combo.unfinishedSquareMeters > 0) {
-    lines.push({
-      id: "dak-roof35-unfinished",
-      label: "Aanvullend dakdeel PIF ROOF35 onafgewerkt",
-      productName: "PIF ROOF35 onafgewerkt",
-      squareMeters: combo.unfinishedSquareMeters,
-      amount: Math.round(combo.unfinishedSquareMeters * combo.ratesPerM2.roof35 * 100) / 100
-    });
-  }
-  if (combo.unfinishedProduct === "roof40" && combo.unfinishedSquareMeters > 0) {
-    lines.push({
-      id: "dak-roof40-unfinished",
-      label: "Aanvullend dakdeel PIF ROOF40 onafgewerkt",
-      productName: "PIF ROOF40 onafgewerkt",
-      squareMeters: combo.unfinishedSquareMeters,
-      amount: Math.round(combo.unfinishedSquareMeters * combo.ratesPerM2.roof40 * 100) / 100
-    });
-  }
-  return lines;
 }

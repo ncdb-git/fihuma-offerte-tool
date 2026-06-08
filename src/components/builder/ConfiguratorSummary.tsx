@@ -83,7 +83,8 @@ export function ConfiguratorSummary({ proposal }: { proposal: Proposal }) {
                 if (dakLines?.length) {
                   return dakLines.map((line) => (
                     <li key={line.id}>
-                      • {line.squareMeters} m² {line.productName} — {money(line.amount)}
+                      • {line.label}
+                      {line.squareMeters > 0 ? ` (${line.squareMeters} m²)` : ""} — {money(line.amount)}
                     </li>
                   ));
                 }

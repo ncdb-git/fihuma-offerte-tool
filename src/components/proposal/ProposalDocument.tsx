@@ -1,4 +1,4 @@
-import { getDakInvestmentLines, isIsofastProductKey } from "@/lib/dak-combination";
+import { getDakInvestmentLines, isIsofastProductKey, unfinishedProductLabel } from "@/lib/dak-combination";
 import {
   calculateIsdeSubsidy,
   formatCustomerSalutation,
@@ -352,7 +352,8 @@ function InvestmentTable({ measure, paymentTerms }: { measure: Measure; paymentT
             ? dakLines.map((line) => (
                 <div key={line.id}>
                   <span>
-                    {line.label} — {line.squareMeters} m²
+                    {line.label}
+                    {line.squareMeters > 0 ? ` — ${line.squareMeters} m²` : ""}
                   </span>
                   <strong>{money(line.amount)}</strong>
                 </div>
@@ -449,8 +450,8 @@ function MeasureBlock({ measure }: { measure: Measure }) {
               {measure.type === "dak" && measure.dakCombination
                 ? `${measure.squareMeters} m² PIF Isofast${
                     measure.dakCombination.unfinishedProduct !== "none" &&
-                    measure.dakCombination.unfinishedSquareMeters > 0
-                      ? ` + ${measure.dakCombination.unfinishedSquareMeters} m² onafgewerkt`
+                    measure.dakCombination.unfinishedQuoteAmount > 0
+                      ? ` + ${unfinishedProductLabel(measure.dakCombination.unfinishedProduct)}`
                       : ""
                   }`
                 : `${measure.squareMeters} m²`}

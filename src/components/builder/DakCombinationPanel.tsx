@@ -1,7 +1,8 @@
 "use client";
 
 import { NumberInput } from "@/components/ui/NumberInput";
-import { DAK_COMBINATION_DEFAULT_RATES, defaultDakCombination, unfinishedProductLabel } from "@/lib/dak-combination";
+import { defaultDakCombination, unfinishedProductLabel } from "@/lib/dak-combination";
+import { money } from "@/lib/proposal-engine";
 import type { DakCombination, DakUnfinishedProduct } from "@/lib/types";
 
 const OPTIONS: { value: DakUnfinishedProduct; label: string }[] = [
@@ -23,7 +24,7 @@ export function DakCombinationPanel({ combination, isofastSquareMeters, onChange
     <section className="rounded-xl border border-fihuma-line bg-[#fbfcfa] p-3">
       <p className="text-xs font-black uppercase tracking-wide text-fihuma-green">Combinatie met onafgewerkt dakdeel</p>
       <p className="mt-1 text-[11px] leading-relaxed text-[#64736b]">
-        Bijv. knieschotten, lage dakdelen of gedeeltelijk afwerken van een zolder. PIF Isofast: {isofastSquareMeters || 0} m².
+        Bijv. knieschotten of lage dakdelen. PIF Isofast: {isofastSquareMeters || 0} m² — vul het offertebedrag apart in.
       </p>
 
       <div className="mt-3 grid gap-2">
@@ -44,7 +45,7 @@ export function DakCombinationPanel({ combination, isofastSquareMeters, onChange
                 onChange({
                   ...combination,
                   unfinishedProduct: option.value,
-                  unfinishedSquareMeters: option.value === "none" ? 0 : combination.unfinishedSquareMeters
+                  unfinishedQuoteAmount: option.value === "none" ? 0 : combination.unfinishedQuoteAmount
                 })
               }
               type="radio"
@@ -57,27 +58,25 @@ export function DakCombinationPanel({ combination, isofastSquareMeters, onChange
       {showUnfinished ? (
         <label className="mt-3 grid gap-1">
           <span className="text-xs font-bold text-[#64736b]">
-            Aantal m² onafgewerkt deel ({unfinishedProductLabel(combination.unfinishedProduct)})
+            Offertebedrag onafgewerkt deel ({unfinishedProductLabel(combination.unfinishedProduct)})
           </span>
           <NumberInput
             className="rounded-lg border border-fihuma-line px-3 py-2 text-sm"
             min={0}
             step={1}
-            value={combination.unfinishedSquareMeters}
+            value={combination.unfinishedQuoteAmount}
             onChange={(e) =>
               onChange({
                 ...combination,
-                unfinishedSquareMeters: Math.max(0, Number(e.target.value) || 0)
+                unfinishedQuoteAmount: Math.max(0, Number(e.target.value) || 0)
               })
             }
           />
+          {combination.unfinishedQuoteAmount > 0 ? (
+            <span className="text-[11px] text-fihuma-green">Wordt toegevoegd als meerwerkregel: {money(combination.unfinishedQuoteAmount)}</span>
+          ) : null}
         </label>
       ) : null}
-
-      <p className="mt-2 text-[11px] text-[#64736b]">
-        Indicatieve tarieven: Isofast {DAK_COMBINATION_DEFAULT_RATES.isofast}/m² · ROOF35{" "}
-        {DAK_COMBINATION_DEFAULT_RATES.roof35}/m² · ROOF40 {DAK_COMBINATION_DEFAULT_RATES.roof40}/m² (aanpasbaar bij investering).
-      </p>
     </section>
   );
 }

@@ -1,7 +1,8 @@
-import { dakTotalSquareMeters, formatDakProductSummary, isIsofastProductKey } from "@/lib/dak-combination";
+import { formatDakProductSummary, isIsofastProductKey } from "@/lib/dak-combination";
 import {
   getProductKeyForMeasure,
   isMeasureDraft,
+  measureExtraWorkTotal,
   measureHasPricing,
   MEASURE_TYPE_LABELS,
   money,
@@ -43,10 +44,10 @@ function stepCompletions(proposal: Proposal, measure: Measure | null): boolean[]
     Boolean(customer.name?.trim()),
     Boolean(measure && measure.squareMeters > 0),
     Boolean(measure && !isMeasureDraft(measure)),
-    Boolean(measure && measure.grossInvestment > 0),
+    Boolean(measure && (measure.grossInvestment > 0 || measureExtraWorkTotal(measure) > 0)),
     Boolean(
       measure &&
-        measure.grossInvestment > 0 &&
+        (measure.grossInvestment > 0 || measureExtraWorkTotal(measure) > 0) &&
         Boolean(agreement.paymentTerms?.trim()) &&
         Boolean(agreement.subsidyClause?.trim()) &&
         Boolean(agreement.approvalMethod)
@@ -77,7 +78,7 @@ export function buildDashboardConceptSnapshot(proposal: Proposal): DashboardConc
 
   const measureTypeLabel = measure ? MEASURE_TYPE_LABELS[measure.type] : "Maatregel nog te kiezen";
   const productKey = measure ? getProductKeyForMeasure(measure) : "";
-  const totalM2 = measure && measure.squareMeters > 0 ? dakTotalSquareMeters(measure) : 0;
+  const totalM2 = measure && measure.squareMeters > 0 ? measure.squareMeters : 0;
   const squareMetersLabel = totalM2 > 0 ? `${totalM2} m²` : "— m²";
   const productName =
     measure && !isMeasureDraft(measure)

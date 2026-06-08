@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdjustmentsPanel } from "@/components/builder/AdjustmentsPanel";
 import { ConfiguratorSummary } from "@/components/builder/ConfiguratorSummary";
 import { DakCombinationPanel, initialDakCombinationForIsofast } from "@/components/builder/DakCombinationPanel";
-import { DakInvestmentBreakdown } from "@/components/builder/DakInvestmentBreakdown";
 import { MeerwerkPanel } from "@/components/builder/MeerwerkPanel";
 import { defaultDakCombination, isIsofastProductKey, normalizeDakCombination } from "@/lib/dak-combination";
 import { NumberInput } from "@/components/ui/NumberInput";
@@ -255,11 +254,11 @@ export function ProposalBuilder({
     }
     if (targetStep > 4 && isIsofastProductKey(productKey)) {
       const combo = normalizeDakCombination(measure);
-      if (combo.unfinishedProduct !== "none" && combo.unfinishedSquareMeters <= 0) {
-        return "Vul het aantal m² voor het onafgewerkte dakdeel in.";
+      if (combo.unfinishedProduct !== "none" && combo.unfinishedQuoteAmount <= 0) {
+        return "Vul het offertebedrag voor het onafgewerkte dakdeel in.";
       }
     }
-    if (targetStep > 5 && measure.grossInvestment <= 0) {
+    if (targetStep > 5 && brutoTotal <= 0) {
       return "Vul een bruto investering in (groter dan €0) voordat u verdergaat.";
     }
     return null;
@@ -763,44 +762,29 @@ export function ProposalBuilder({
           {step === 5 && (
             <div className="grid gap-4">
               <p className="text-xs font-bold uppercase tracking-wide text-[#64736b]">Investering</p>
-              {isIsofastProductKey(productKey) ? (
-                <>
-                  <DakInvestmentBreakdown
-                    combination={normalizeDakCombination(measure)}
-                    measure={measure}
-                    productKey={productKey}
-                    onRatesChange={(rates) =>
-                      updateDakCombination({
-                        ...normalizeDakCombination(measure),
-                        ratesPerM2: rates
-                      })
-                    }
-                  />
-                  <div className="rounded-lg border border-fihuma-line bg-fihuma-mint px-3 py-2 text-sm">
-                    <div className="flex justify-between font-bold">
-                      <span>Bruto isolatie (totaal, automatisch)</span>
-                      <span className="text-fihuma-green">{money(measure.grossInvestment)}</span>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <label className="grid gap-1">
-                  <span className="text-xs font-bold text-[#64736b]">Basis isolatie (€)</span>
-                  <NumberInput
-                    hasError={fieldError?.includes("investering") ?? false}
-                    className="rounded-lg border border-fihuma-line px-3 py-2 text-sm"
-                    value={measure.grossInvestment}
-                    onChange={(e) => {
-                      setFieldError(null);
-                      setProposal((p) => {
-                        const cur = p.measures[0];
-                        if (!cur) return p;
-                        return { ...p, measures: [syncFinancials({ ...cur, grossInvestment: Number(e.target.value) || 0 }, modules, nip)] };
-                      });
-                    }}
-                  />
-                </label>
-              )}
+              <label className="grid gap-1">
+                <span className="text-xs font-bold text-[#64736b]">
+                  {isIsofastProductKey(productKey) ? "Basis isolatie PIF Isofast (€)" : "Basis isolatie (€)"}
+                </span>
+                <NumberInput
+                  hasError={fieldError?.includes("investering") ?? false}
+                  className="rounded-lg border border-fihuma-line px-3 py-2 text-sm"
+                  value={measure.grossInvestment}
+                  onChange={(e) => {
+                    setFieldError(null);
+                    setProposal((p) => {
+                      const cur = p.measures[0];
+                      if (!cur) return p;
+                      return { ...p, measures: [syncFinancials({ ...cur, grossInvestment: Number(e.target.value) || 0 }, modules, nip)] };
+                    });
+                  }}
+                />
+              </label>
+              {isIsofastProductKey(productKey) && normalizeDakCombination(measure).unfinishedProduct !== "none" ? (
+                <p className="text-xs text-[#64736b]">
+                  Onafgewerkt dakdeel ({money(normalizeDakCombination(measure).unfinishedQuoteAmount)}) staat bij meerwerk.
+                </p>
+              ) : null}
               {measure.extraWork.length > 0 ? (
                 <div className="rounded-lg border border-fihuma-line bg-[#fbfcfa] px-3 py-2 text-xs">
                   <p className="mb-1 font-bold text-[#64736b]">Meerwerk</p>

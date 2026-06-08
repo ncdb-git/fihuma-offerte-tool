@@ -50,16 +50,11 @@ export type MoneyLine = {
 /** Onafgewerkt dakdeel naast PIF Isofast (knieschot, laag dak, etc.). */
 export type DakUnfinishedProduct = "none" | "roof35" | "roof40";
 
-export type DakCombinationRates = {
-  isofast: number;
-  roof35: number;
-  roof40: number;
-};
-
+/** Onafgewerkt dakdeel naast PIF Isofast (knieschot, laag dak, etc.) — vast offertebedrag. */
 export type DakCombination = {
   unfinishedProduct: DakUnfinishedProduct;
-  unfinishedSquareMeters: number;
-  ratesPerM2: DakCombinationRates;
+  /** Vaste quote voor het onafgewerkt deel (€), geen m²-berekening. */
+  unfinishedQuoteAmount: number;
 };
 
 export type DakInvestmentLine = {
