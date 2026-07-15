@@ -16,21 +16,54 @@ function safeSecretCompare(provided: string, expected: string) {
   return timingSafeEqual(providedBuffer, expectedBuffer);
 }
 
-export function readWebhookSecretFromRequest(request: Request) {
+function secretsMatch(provided: string | null | undefined, expected: string) {
+  if (!provided || !expected) return false;
+  return safeSecretCompare(provided.trim(), expected);
+}
+
+/** Pipedrive stuurt Basic Auth als je HTTP username/password invult in de webhook-instellingen. */
+function secretFromBasicAuth(authorization: string) {
+  const encoded = authorization.slice("basic ".length).trim();
+  try {
+    const decoded = atob(encoded);
+    const separator = decoded.indexOf(":");
+    if (separator === -1) return null;
+    // Accepteer secret als username OF als password (zo flexibel mogelijk in Pipedrive UI)
+    const username = decoded.slice(0, separator);
+    const password = decoded.slice(separator + 1);
+    return { username, password };
+  } catch {
+    return null;
+  }
+}
+
+export function readWebhookSecretCandidates(request: Request) {
+  const candidates: string[] = [];
+
   const headerSecret = request.headers.get("x-webhook-secret")?.trim();
-  if (headerSecret) return headerSecret;
+  if (headerSecret) candidates.push(headerSecret);
 
   const authorization = request.headers.get("authorization")?.trim();
-  if (authorization?.toLowerCase().startsWith("bearer ")) {
-    return authorization.slice("bearer ".length).trim();
+  if (!authorization) return candidates;
+
+  if (authorization.toLowerCase().startsWith("bearer ")) {
+    const bearer = authorization.slice("bearer ".length).trim();
+    if (bearer) candidates.push(bearer);
+    return candidates;
   }
 
-  return null;
+  if (authorization.toLowerCase().startsWith("basic ")) {
+    const basic = secretFromBasicAuth(authorization);
+    if (basic?.username) candidates.push(basic.username);
+    if (basic?.password) candidates.push(basic.password);
+  }
+
+  return candidates;
 }
 
 export function verifyPipedriveWebhookSecret(request: Request) {
   const expected = webhookSecretExpected();
-  const provided = readWebhookSecretFromRequest(request);
-  if (!expected || !provided) return false;
-  return safeSecretCompare(provided, expected);
+  if (!expected) return false;
+
+  return readWebhookSecretCandidates(request).some((candidate) => secretsMatch(candidate, expected));
 }
