@@ -61,9 +61,20 @@ export function readWebhookSecretCandidates(request: Request) {
   return candidates;
 }
 
-export function verifyPipedriveWebhookSecret(request: Request) {
-  const expected = webhookSecretExpected();
-  if (!expected) return false;
+export type WebhookAuthResult =
+  | { ok: true }
+  | { ok: false; reason: "secret_not_configured" | "missing_credentials" | "invalid_secret" };
 
-  return readWebhookSecretCandidates(request).some((candidate) => secretsMatch(candidate, expected));
+export function verifyPipedriveWebhookSecret(request: Request): WebhookAuthResult {
+  const expected = webhookSecretExpected();
+  if (!expected) return { ok: false, reason: "secret_not_configured" };
+
+  const candidates = readWebhookSecretCandidates(request);
+  if (candidates.length === 0) return { ok: false, reason: "missing_credentials" };
+
+  if (candidates.some((candidate) => secretsMatch(candidate, expected))) {
+    return { ok: true };
+  }
+
+  return { ok: false, reason: "invalid_secret" };
 }

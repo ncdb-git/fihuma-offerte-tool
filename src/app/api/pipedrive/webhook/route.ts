@@ -84,9 +84,35 @@ function formatStageId(stageId: unknown) {
 }
 
 export async function POST(request: Request) {
-  if (!verifyPipedriveWebhookSecret(request)) {
-    logWebhook("UNAUTHORIZED");
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const auth = verifyPipedriveWebhookSecret(request);
+  if (!auth.ok) {
+    // Nooit de secret loggen — alleen de reden (config vs credentials).
+    logWebhook("UNAUTHORIZED", { reason: auth.reason });
+
+    if (auth.reason === "secret_not_configured") {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Unauthorized",
+          reason: "secret_not_configured",
+          hint: "Zet PIPEDRIVE_WEBHOOK_SECRET in Vercel Environment Variables en redeploy."
+        },
+        { status: 503 }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "Unauthorized",
+        reason: auth.reason,
+        hint:
+          auth.reason === "missing_credentials"
+            ? "Pipedrive moet HTTP Auth username/password meesturen (password = PIPEDRIVE_WEBHOOK_SECRET)."
+            : "HTTP Auth password komt niet overeen met PIPEDRIVE_WEBHOOK_SECRET op Vercel."
+      },
+      { status: 401 }
+    );
   }
 
   const env = storageEnv();
