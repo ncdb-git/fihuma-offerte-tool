@@ -1,14 +1,11 @@
 import "server-only";
 
 import { advisorFromSessionUser } from "@/lib/advisor-resolver";
-import { userCanAccessProposal } from "@/lib/auth-proposals";
 import type { SessionUser } from "@/lib/auth-session";
-import { ForbiddenError } from "@/lib/require-api-auth";
-import { requireProposalAccess } from "@/lib/proposal-access";
 import { runWithCreateLoadProfiler } from "@/lib/create-load-profiler";
 import { loadProposalForDealFast } from "@/lib/deal-proposal-loader";
 import { createBlankManualProposal } from "@/lib/proposal-engine";
-import { allocateProposalId, getProposalConceptById, listProposalsByDealId, upsertProposalConcept } from "@/lib/proposal-store";
+import { allocateProposalId, getProposalConceptById, upsertProposalConcept } from "@/lib/proposal-store";
 import type { Proposal } from "@/lib/types";
 
 export type CreateBootstrapParams = {
@@ -28,12 +25,8 @@ export type CreateBootstrapResult = {
   needsPipedriveRefresh?: boolean;
 };
 
-function assertProposalAccess(user: SessionUser, proposal: Proposal) {
-  requireProposalAccess(user, proposal);
-}
-
+/** Metadata only — default adviseur op nieuwe handmatige offertes. */
 function withSessionAdvisor(proposal: Proposal, user: SessionUser) {
-  if (user.role === "admin") return proposal;
   return {
     ...proposal,
     advisor: advisorFromSessionUser(user)
@@ -52,28 +45,16 @@ async function bootstrapCreatePageInner(params: CreateBootstrapParams, user: Ses
   }
 
   if (params.dealId) {
-    if (params.createNew && user.role !== "admin") {
-      const siblings = await listProposalsByDealId(params.dealId);
-      if (siblings.length > 0 && !siblings.some((entry) => userCanAccessProposal(user, entry.proposal))) {
-        throw new ForbiddenError("Je hebt geen toegang tot offertes voor deze deal.");
-      }
-    }
-
-    const sessionAdvisor = user.role === "admin" ? undefined : advisorFromSessionUser(user);
     const { proposal, siblings, needsPipedriveRefresh } = await loadProposalForDealFast(params.dealId, {
       proposalId: params.proposalId,
-      createNew: params.createNew,
-      advisor: sessionAdvisor
+      createNew: params.createNew
     });
-    assertProposalAccess(user, proposal);
-
-    const visibleSiblings = user.role === "admin" ? siblings : siblings.filter((entry) => userCanAccessProposal(user, entry.proposal));
 
     return {
       mode: "deal",
       proposal,
       dealId: params.dealId,
-      siblings: visibleSiblings,
+      siblings,
       needsPipedriveRefresh
     };
   }
@@ -81,7 +62,6 @@ async function bootstrapCreatePageInner(params: CreateBootstrapParams, user: Ses
   const manualId = params.manualId ?? `manual-${Date.now()}`;
   const storedProposal = await getProposalConceptById(manualId);
   if (storedProposal) {
-    assertProposalAccess(user, storedProposal);
     return {
       mode: "manual_existing",
       proposal: storedProposal

@@ -12,9 +12,9 @@ export function proposalDisplayNumber(proposal: Pick<Proposal, "id" | "quoteNumb
 
 export function advisorFirstName(advisorName: string | undefined | null) {
   const trimmed = advisorName?.trim() ?? "";
-  if (!trimmed) return "Adviseur onbekend";
+  if (!trimmed) return "Onbekende adviseur";
   const first = trimmed.split(/\s+/)[0];
-  return first || "Adviseur onbekend";
+  return first || "Onbekende adviseur";
 }
 
 export function nextPipedriveProposalId(dealId: string, existingIds: string[]) {

@@ -1,43 +1,38 @@
 import type { SessionUser } from "@/lib/auth-session";
+import { advisors } from "@/lib/proposal-engine";
 import type { Proposal } from "@/lib/types";
 
-function normalizeEmail(value: string | undefined | null) {
-  return value?.trim().toLowerCase() ?? "";
+/**
+ * Adviseur op een offerte is metadata (weergave/filter/rapportage), geen autorisatie.
+ * Ingelogd = toegang tot alle offertes; niet-ingelogd wordt elders afgevangen.
+ */
+export function userCanAccessProposal(_user: SessionUser, _proposal: Proposal) {
+  return true;
 }
 
-function normalizeName(value: string | undefined | null) {
-  return value?.trim().toLowerCase() ?? "";
-}
+/** Alleen voor UI-filters: hoort deze offerte bij de geselecteerde adviseur. */
+export function proposalMatchesAdvisorFilter(proposal: Proposal, advisorFilter: string) {
+  if (advisorFilter === "all") return true;
 
-function firstName(value: string) {
-  return value.split(/\s+/)[0] ?? "";
-}
+  const email = proposal.advisor?.email?.trim().toLowerCase() ?? "";
+  const name = proposal.advisor?.name?.trim() ?? "";
+  const id = proposal.advisor?.id?.trim() ?? "";
 
-/** Bepaalt of een ingelogde gebruiker toegang heeft tot een offerte. */
-export function userCanAccessProposal(user: SessionUser, proposal: Proposal) {
-  if (user.role === "admin") return true;
-  return proposalBelongsToAdvisor(user, proposal);
-}
-
-export function proposalBelongsToAdvisor(user: SessionUser, proposal: Proposal) {
-  const advisorEmail = normalizeEmail(proposal.advisor?.email);
-  const userEmail = normalizeEmail(user.email);
-
-  if (advisorEmail && advisorEmail === userEmail) return true;
-
-  if (!advisorEmail) {
-    const advisorName = normalizeName(proposal.advisor?.name);
-    const userName = normalizeName(user.name);
-    if (advisorName && userName) {
-      if (advisorName === userName) return true;
-      if (firstName(advisorName) && firstName(advisorName) === firstName(userName)) return true;
-    }
+  if (advisorFilter === "unknown") {
+    if (!email && !name) return true;
+    const known = advisors.some(
+      (advisor) => (email && advisor.email.toLowerCase() === email) || (id && advisor.id === id)
+    );
+    return !known;
   }
 
-  return false;
+  const selected = advisors.find((advisor) => advisor.id === advisorFilter);
+  if (!selected) return id === advisorFilter;
+
+  return id === selected.id || (email !== "" && email === selected.email.toLowerCase());
 }
 
-export function filterProposalsForUser<T extends { proposal: Proposal }>(user: SessionUser, records: T[]) {
-  if (user.role === "admin") return records;
-  return records.filter((record) => proposalBelongsToAdvisor(user, record.proposal));
+/** @deprecated Geen server-side visibility filter meer — API geeft alles terug. */
+export function filterProposalsForUser<T extends { proposal: Proposal }>(_user: SessionUser, records: T[]) {
+  return records;
 }

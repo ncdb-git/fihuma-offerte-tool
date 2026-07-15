@@ -433,7 +433,7 @@ export async function listProposalRecords({ includeArchived = false, pipedriveOn
   if (client) {
     let query = client
       .from(PROPOSALS_TABLE)
-      .select("proposal_data, created_at, updated_at, status, pipedrive_deal_id")
+      .select("id, proposal_id, proposal_data, created_at, updated_at, status, pipedrive_deal_id")
       .order("updated_at", { ascending: false });
 
     if (pipedriveOnly) {
@@ -468,7 +468,13 @@ export async function listProposalRecords({ includeArchived = false, pipedriveOn
       .filter((entry) => (pipedriveOnly ? isPipedriveRecord(entry.proposal) : isStoredConceptRecord(entry.proposal)))
       .filter((entry) => includeArchived || !isArchivedStatus(entry.proposal.status));
 
-    console.info("[proposal-store] dashboard fetch count", { storageMode: "supabase", count: records.length, pipedriveOnly, includeArchived });
+    console.info("[proposal-store] dashboard fetch count", {
+      storageMode: "supabase",
+      count: records.length,
+      proposal_ids: records.map((entry) => entry.proposal.id),
+      pipedriveOnly,
+      includeArchived
+    });
     return records;
   }
 

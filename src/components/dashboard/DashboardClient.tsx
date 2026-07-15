@@ -3,6 +3,7 @@
 import { Archive, ChevronDown, ChevronRight, Copy, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { proposalMatchesAdvisorFilter } from "@/lib/auth-proposals";
 import { groupDashboardProposals, isManualGroup, type DashboardCustomerGroup, type DashboardProposalRow } from "@/lib/dashboard-groups";
 import { progressToneClasses } from "@/lib/proposal-configurator-progress";
 import { advisors } from "@/lib/proposal-engine";
@@ -58,6 +59,7 @@ export function DashboardClient() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [advisorFilter, setAdvisorFilter] = useState("all");
+  const [advisorFilterReady, setAdvisorFilterReady] = useState(false);
   const [statusFilter, setStatusFilter] = useState("active");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
@@ -119,6 +121,23 @@ export function DashboardClient() {
   loadProposalsRef.current = loadProposals;
 
   useEffect(() => {
+    void (async () => {
+      const response = await fetch("/api/auth/me", { cache: "no-store" });
+      const payload = await response.json().catch(() => null);
+      const user = payload?.user as { role?: string; email?: string } | null;
+
+      // UI-default: adviseurs starten op eigen filter; admins zien alles. Altijd overschrijfbaar.
+      if (user?.role === "advisor" && user.email) {
+        const match = advisors.find((advisor) => advisor.email.toLowerCase() === user.email!.toLowerCase());
+        setAdvisorFilter(match?.id ?? "all");
+      } else {
+        setAdvisorFilter("all");
+      }
+      setAdvisorFilterReady(true);
+    })();
+  }, []);
+
+  useEffect(() => {
     void loadProposalsRef.current("initial");
 
     function refreshIfVisible() {
@@ -151,6 +170,7 @@ export function DashboardClient() {
   }, []);
 
   const filteredRecords = useMemo(() => {
+    if (!advisorFilterReady) return [];
     const query = searchQuery.trim().toLowerCase();
     return records.filter((record) => {
       const { proposal } = record;
@@ -174,7 +194,7 @@ export function DashboardClient() {
         if (!haystack.includes(query)) return false;
       }
 
-      if (advisorFilter !== "all" && proposal.advisor.id !== advisorFilter) return false;
+      if (!proposalMatchesAdvisorFilter(proposal, advisorFilter)) return false;
 
       if (statusFilter === "active") {
         if (status === "Gearchiveerd") return false;
@@ -184,7 +204,7 @@ export function DashboardClient() {
 
       return true;
     });
-  }, [records, searchQuery, advisorFilter, statusFilter]);
+  }, [records, searchQuery, advisorFilter, statusFilter, advisorFilterReady]);
 
   const customerGroups = useMemo(() => groupDashboardProposals(filteredRecords), [filteredRecords]);
 
@@ -309,6 +329,7 @@ export function DashboardClient() {
           value={advisorFilter}
         >
           <option value="all">Alle adviseurs</option>
+          <option value="unknown">Onbekende adviseur</option>
           {advisors.map((advisor) => (
             <option key={advisor.id} value={advisor.id}>
               {advisor.name}
