@@ -1,8 +1,8 @@
 "use client";
 
-import { Archive, ChevronDown, ChevronRight, Copy, Plus, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Archive, ChevronDown, ChevronRight, Copy, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { groupDashboardProposals, isManualGroup, type DashboardCustomerGroup, type DashboardProposalRow } from "@/lib/dashboard-groups";
 import { progressToneClasses } from "@/lib/proposal-configurator-progress";
 import { advisors } from "@/lib/proposal-engine";
@@ -44,10 +44,15 @@ function addressSummary(group: DashboardCustomerGroup) {
   return parts.length ? parts.join(", ") : "—";
 }
 
+const POLL_INTERVAL_MS = 30_000;
+const UPDATED_LABEL_MS = 2_500;
+
 export function DashboardClient() {
   const router = useRouter();
   const [records, setRecords] = useState<ProposalRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [updatedLabel, setUpdatedLabel] = useState(false);
   const [error, setError] = useState("");
   const [persistenceWarning, setPersistenceWarning] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -56,23 +61,93 @@ export function DashboardClient() {
   const [statusFilter, setStatusFilter] = useState("active");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
-  async function loadProposals() {
-    setIsLoading(true);
-    setError("");
-    const response = await fetch("/api/proposals", { cache: "no-store" });
-    const payload = await response.json();
-    if (!response.ok) {
-      setError(payload?.error ?? "Werkvoorraad ophalen mislukt.");
-      setIsLoading(false);
-      return;
+  const isFetchingRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const updatedLabelTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadProposalsRef = useRef<(mode?: "initial" | "silent" | "manual") => Promise<void>>(async () => undefined);
+
+  async function loadProposals(mode: "initial" | "silent" | "manual" = "silent") {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    if (mode === "initial") {
+      setIsLoading(true);
+      setError("");
+    } else if (mode === "manual") {
+      setIsRefreshing(true);
     }
-    setRecords(payload.data ?? []);
-    setPersistenceWarning(payload.persistenceWarning ?? null);
-    setIsLoading(false);
+
+    try {
+      const response = await fetch("/api/proposals", { cache: "no-store", signal: controller.signal });
+      const payload = await response.json().catch(() => null);
+      if (controller.signal.aborted) return;
+
+      if (!response.ok) {
+        if (mode !== "silent") {
+          setError(payload?.error ?? "Werkvoorraad ophalen mislukt.");
+        }
+        return;
+      }
+
+      setRecords(payload?.data ?? []);
+      setPersistenceWarning(payload?.persistenceWarning ?? null);
+      if (mode !== "silent") setError("");
+
+      if (mode === "manual") {
+        setUpdatedLabel(true);
+        if (updatedLabelTimeoutRef.current) clearTimeout(updatedLabelTimeoutRef.current);
+        updatedLabelTimeoutRef.current = setTimeout(() => setUpdatedLabel(false), UPDATED_LABEL_MS);
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      if (mode !== "silent") {
+        setError("Werkvoorraad ophalen mislukt.");
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+      isFetchingRef.current = false;
+    }
   }
 
+  loadProposalsRef.current = loadProposals;
+
   useEffect(() => {
-    void loadProposals();
+    void loadProposalsRef.current("initial");
+
+    function refreshIfVisible() {
+      if (document.visibilityState !== "visible") return;
+      void loadProposalsRef.current("silent");
+    }
+
+    function onFocus() {
+      void loadProposalsRef.current("silent");
+    }
+
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void loadProposalsRef.current("silent");
+      }
+    }
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    const pollId = window.setInterval(refreshIfVisible, POLL_INTERVAL_MS);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.clearInterval(pollId);
+      abortRef.current?.abort();
+      if (updatedLabelTimeoutRef.current) clearTimeout(updatedLabelTimeoutRef.current);
+    };
   }, []);
 
   const filteredRecords = useMemo(() => {
@@ -135,7 +210,7 @@ export function DashboardClient() {
       setError(payload?.error ?? "Archiveren mislukt.");
       return;
     }
-    await loadProposals();
+    await loadProposals("silent");
     router.refresh();
   }
 
@@ -149,7 +224,7 @@ export function DashboardClient() {
       setError(payload?.error ?? "Verwijderen mislukt.");
       return;
     }
-    await loadProposals();
+    await loadProposals("silent");
   }
 
   async function duplicateProposal(proposalId: string) {
@@ -166,7 +241,7 @@ export function DashboardClient() {
       return;
     }
     const payload = await response.json();
-    await loadProposals();
+    await loadProposals("silent");
     if (payload.proposal) router.push(proposalHref(payload.proposal as Proposal));
   }
 
@@ -188,23 +263,37 @@ export function DashboardClient() {
       router.push(proposalHref(payload.proposal as Proposal));
       return;
     }
-    await loadProposals();
+    await loadProposals("silent");
   }
 
   return (
     <section className="px-8 py-7">
-      <div className="mb-8">
-        <h1 className="text-3xl font-black">Werkvoorraad</h1>
-        <p className="mt-1 text-sm text-[#64736b]">
-          Gegroepeerd per klant/deal. Meerdere conceptoffertes onder één klant (bijv. vloer, bodem, spouw).
-        </p>
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black">Werkvoorraad</h1>
+          <p className="mt-1 text-sm text-[#64736b]">
+            Gegroepeerd per klant/deal. Meerdere conceptoffertes onder één klant (bijv. vloer, bodem, spouw).
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {updatedLabel ? <span className="text-xs font-bold text-fihuma-green">Bijgewerkt</span> : null}
+          <button
+            className="flex items-center justify-center gap-2 rounded-lg border border-fihuma-line bg-white px-4 py-2.5 text-sm font-bold text-[#4a5751] transition hover:border-fihuma-green hover:text-fihuma-green disabled:opacity-60"
+            disabled={isRefreshing || isLoading}
+            onClick={() => void loadProposals("manual")}
+            type="button"
+          >
+            <RefreshCw className={isRefreshing ? "animate-spin" : undefined} size={16} />
+            Vernieuwen
+          </button>
+        </div>
       </div>
 
       {persistenceWarning ? (
         <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{persistenceWarning}</p>
       ) : null}
 
-      <div className="mb-5 grid grid-cols-[1fr_170px_170px_120px] gap-3">
+      <div className="mb-5 grid grid-cols-[1fr_170px_170px] gap-3">
         <label className="flex items-center gap-2 rounded-lg border border-fihuma-line bg-white px-3">
           <Search size={18} />
           <input
@@ -239,9 +328,6 @@ export function DashboardClient() {
           <option value="Geüpload naar Pipedrive">Geüpload naar Pipedrive</option>
           <option value="Gearchiveerd">Gearchiveerd</option>
         </select>
-        <button className="flex items-center justify-center gap-2 rounded-lg border border-fihuma-line bg-white font-bold" type="button">
-          <SlidersHorizontal size={18} /> Filters
-        </button>
       </div>
 
       {error ? <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p> : null}
