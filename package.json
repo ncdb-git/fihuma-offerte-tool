@@ -7,12 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "seed:users": "node scripts/seed-users.mjs"
   },
   "dependencies": {
+    "@sparticuz/chromium": "^133.0.0",
     "@supabase/supabase-js": "^2.45.4",
     "lucide-react": "^0.468.0",
-    "@sparticuz/chromium": "^133.0.0",
     "next": "^14.2.16",
     "puppeteer-core": "^24.2.0",
     "react": "^18.3.1",
@@ -25,6 +26,7 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "autoprefixer": "^10.4.20",
+    "dotenv": "^17.4.2",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.16",
     "postcss": "^8.4.47",

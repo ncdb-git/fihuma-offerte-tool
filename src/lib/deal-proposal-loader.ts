@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { Advisor } from "@/lib/types";
 import { createGuidedProposal } from "@/lib/proposal-engine";
 import { refreshDealProposalFromPipedrive, shouldRefreshPipedriveFromCrm } from "@/lib/pipedrive-sync";
 import {
@@ -10,13 +11,14 @@ import {
 } from "@/lib/proposal-store";
 import type { Proposal } from "@/lib/types";
 
-export async function createMinimalProposalForDeal(dealId: string): Promise<Proposal> {
+export async function createMinimalProposalForDeal(dealId: string, options?: { advisor?: Advisor }): Promise<Proposal> {
   const guided = createGuidedProposal(dealId);
   const newId = await allocateProposalId(dealId);
   const draft = {
     ...guided,
     id: newId,
     quoteNumber: newId,
+    advisor: options?.advisor ?? guided.advisor,
     customer: {
       ...guided.customer,
       pipedriveDealId: dealId,
@@ -30,10 +32,10 @@ export async function createMinimalProposalForDeal(dealId: string): Promise<Prop
 /** Snel pad: alleen Supabase, geen blokkerende Pipedrive-call. */
 export async function loadProposalForDealFast(
   dealId: string,
-  options: { proposalId?: string; createNew?: boolean } = {}
+  options: { proposalId?: string; createNew?: boolean; advisor?: Advisor } = {}
 ) {
   if (options.createNew) {
-    const proposal = await createMinimalProposalForDeal(dealId);
+    const proposal = await createMinimalProposalForDeal(dealId, { advisor: options.advisor });
     const siblings = await listProposalsByDealId(dealId);
     return {
       proposal,
@@ -65,8 +67,8 @@ export async function loadProposalForDealFast(
   };
 }
 
-export async function createNewProposalForDeal(dealId: string): Promise<Proposal> {
-  return createMinimalProposalForDeal(dealId);
+export async function createNewProposalForDeal(dealId: string, options?: { advisor?: Advisor }): Promise<Proposal> {
+  return createMinimalProposalForDeal(dealId, options);
 }
 
 type EnsureOptions = {

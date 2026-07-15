@@ -1,34 +1,52 @@
 "use client";
 
-import { AUTH_STORAGE_KEY, DEMO_LOGIN } from "@/lib/auth";
-import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 
 const FIHUMA_LOGO_SRC = "/brand/Logo%20Fihuma.png";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (window.localStorage.getItem(AUTH_STORAGE_KEY) === "true") {
-      router.replace("/dashboard");
-    }
-  }, [router]);
+    void (async () => {
+      const response = await fetch("/api/auth/me", { cache: "no-store" });
+      const payload = await response.json().catch(() => null);
+      if (response.ok && payload?.authenticated) {
+        router.replace(searchParams.get("next") || "/dashboard");
+      }
+    })();
+  }, [router, searchParams]);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setIsSubmitting(true);
 
-    if (email.trim().toLowerCase() === DEMO_LOGIN.email && password === DEMO_LOGIN.password) {
-      window.localStorage.setItem(AUTH_STORAGE_KEY, "true");
-      router.replace("/dashboard");
-      return;
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setError(payload?.error ?? "Inloggen mislukt. Probeer het opnieuw.");
+        return;
+      }
+
+      router.replace(searchParams.get("next") || "/dashboard");
+    } catch {
+      setError("Inloggen mislukt. Controleer je internetverbinding en probeer opnieuw.");
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setError("E-mailadres of wachtwoord is onjuist. Controleer de gegevens en probeer opnieuw.");
   }
 
   return (
@@ -50,7 +68,7 @@ export default function LoginPage() {
                 autoComplete="email"
                 className="rounded-xl border border-[#dae0db] px-4 py-3 text-sm outline-none transition focus:border-fihuma-green focus:ring-4 focus:ring-[#50ae4c]/10"
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="adviseur@fihuma.nl"
+                placeholder="naam@fihumacollectief.nl"
                 type="email"
                 value={email}
               />
@@ -70,12 +88,30 @@ export default function LoginPage() {
 
             {error ? <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p> : null}
 
-            <button className="mt-2 rounded-xl bg-fihuma-green px-4 py-3 text-sm font-black text-white shadow-[0_12px_30px_rgba(80,174,76,0.24)] transition hover:brightness-95" type="submit">
-              Inloggen
+            <button
+              className="mt-2 rounded-xl bg-fihuma-green px-4 py-3 text-sm font-black text-white shadow-[0_12px_30px_rgba(80,174,76,0.24)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isSubmitting}
+              type="submit"
+            >
+              {isSubmitting ? "Bezig met inloggen..." : "Inloggen"}
             </button>
           </div>
         </form>
       </section>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-[#f7f8f5] px-6">
+          <p className="text-sm font-bold text-[#64736b]">Inlogpagina laden...</p>
+        </main>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

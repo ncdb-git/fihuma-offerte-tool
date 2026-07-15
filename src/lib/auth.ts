@@ -1,6 +1,4 @@
-export const AUTH_STORAGE_KEY = "fihuma-proposal-authenticated";
+export { SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, createSessionToken, sessionCookieOptions, verifySessionToken } from "@/lib/auth-session";
+export type { SessionUser, UserRole } from "@/lib/auth-session";
 
-export const DEMO_LOGIN = {
-  email: "adviseur@fihuma.nl",
-  password: "fihuma2026"
-} as const;
+export { userCanAccessProposal, proposalBelongsToAdvisor, filterProposalsForUser } from "@/lib/auth-proposals";

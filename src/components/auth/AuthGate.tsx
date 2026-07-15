@@ -1,6 +1,5 @@
 "use client";
 
-import { AUTH_STORAGE_KEY } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -15,12 +14,24 @@ export function AuthGate({
   const [isAllowed, setIsAllowed] = useState(false);
 
   useEffect(() => {
-    if (window.localStorage.getItem(AUTH_STORAGE_KEY) === "true") {
-      setIsAllowed(true);
-      return;
-    }
+    let cancelled = false;
 
-    router.replace("/login");
+    void (async () => {
+      const response = await fetch("/api/auth/me", { cache: "no-store" });
+      const payload = await response.json().catch(() => null);
+      if (cancelled) return;
+
+      if (response.ok && payload?.authenticated) {
+        setIsAllowed(true);
+        return;
+      }
+
+      router.replace("/login");
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   if (!isAllowed) {

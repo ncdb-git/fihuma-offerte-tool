@@ -1,6 +1,5 @@
 "use client";
 
-import { AUTH_STORAGE_KEY } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -8,7 +7,11 @@ export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace(window.localStorage.getItem(AUTH_STORAGE_KEY) === "true" ? "/dashboard" : "/login");
+    void (async () => {
+      const response = await fetch("/api/auth/me", { cache: "no-store" });
+      const payload = await response.json().catch(() => null);
+      router.replace(response.ok && payload?.authenticated ? "/dashboard" : "/login");
+    })();
   }, [router]);
 
   return (

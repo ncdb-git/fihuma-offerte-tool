@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { filterProposalsForUser } from "@/lib/auth-proposals";
 import { listProposalRecords, proposalStorageMode } from "@/lib/proposal-store";
+import { handleApiAuthError, requireRequestSessionUser } from "@/lib/require-api-auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -7,15 +9,17 @@ export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   try {
+    const user = await requireRequestSessionUser();
     const dealId = new URL(request.url).searchParams.get("deal_id")?.trim() ?? "";
     const storageMode = proposalStorageMode();
     let records = await listProposalRecords({ pipedriveOnly: false, includeArchived: false });
+    records = filterProposalsForUser(user, records);
 
     if (dealId) {
       records = records.filter((entry) => entry.proposal.customer.pipedriveDealId === dealId);
     }
 
-    console.info("[api:proposals] dashboard fetch", { storageMode, count: records.length });
+    console.info("[api:proposals] dashboard fetch", { storageMode, count: records.length, role: user.role, email: user.email });
 
     return NextResponse.json({
       ok: true,
@@ -27,6 +31,9 @@ export async function GET(request: Request) {
       data: records
     });
   } catch (error) {
+    const authResponse = handleApiAuthError(error);
+    if (authResponse) return authResponse;
+
     console.error("[api:proposals] ophalen mislukt", error);
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Proposals ophalen mislukt" }, { status: 500 });
   }

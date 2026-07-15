@@ -7,4 +7,5 @@ coverage
 .env
 .env.local
 .data
+supabase/seed-users.credentials.txt
 *.log

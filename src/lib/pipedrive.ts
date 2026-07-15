@@ -1,5 +1,5 @@
+import { resolveAdvisorFromEmail } from "@/lib/advisor-resolver";
 import {
-  advisors,
   applyProductToMeasure,
   createGuidedProposal,
   createBlankMeasure,
@@ -218,7 +218,7 @@ export async function mapPipedriveBundleToProposal(dealId: string, bundle: Await
       )
     : createPlaceholderMeasure();
   const ownerEmail = textValue(getPath(source, "deal.owner_id.email"));
-  const advisor = advisors.find((item) => item.email.toLowerCase() === ownerEmail.toLowerCase()) ?? advisors[0];
+  const advisor = resolveAdvisorFromEmail(ownerEmail);
   const proposal = createGuidedProposal(dealId);
 
   return sanitizeProposalCopy({

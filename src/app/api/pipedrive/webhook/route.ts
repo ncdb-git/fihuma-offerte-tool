@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchPipedriveDealBundle, isTargetOfferStage, mapPipedriveBundleToProposal } from "@/lib/pipedrive";
+import { verifyPipedriveWebhookSecret } from "@/lib/pipedrive-webhook-auth";
 import { normalizeProposalStatus } from "@/lib/proposal-status";
 import { allocateProposalId, listProposalsByDealId, proposalStorageMode, upsertProposalConcept } from "@/lib/proposal-store";
 
@@ -83,6 +84,11 @@ function formatStageId(stageId: unknown) {
 }
 
 export async function POST(request: Request) {
+  if (!verifyPipedriveWebhookSecret(request)) {
+    logWebhook("UNAUTHORIZED");
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
   const env = storageEnv();
   const expected = expectedStageId();
 

@@ -26,3 +26,14 @@ create index if not exists proposals_pipedrive_deal_id_idx
 
 create index if not exists proposals_status_idx on public.proposals (status);
 create index if not exists proposals_updated_at_idx on public.proposals (updated_at desc);
+
+-- Gebruikers (login) — zie supabase/migrations/20250715120000_users_auth.sql
+create table if not exists public.users (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  email text unique not null,
+  role text not null check (role in ('admin', 'advisor')),
+  password_hash text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);

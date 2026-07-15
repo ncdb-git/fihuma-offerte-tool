@@ -62,6 +62,20 @@ export const advisors: Advisor[] = [
     active: true
   },
   {
+    id: "oktay",
+    name: "Oktay",
+    phone: "",
+    email: "oktay@fihumacollectief.nl",
+    active: true
+  },
+  {
+    id: "kay",
+    name: "Kay",
+    phone: "",
+    email: "kay@fihumacollectief.nl",
+    active: true
+  },
+  {
     id: "admin-demo",
     name: "Demo adviseur",
     phone: "085 060 12 00",

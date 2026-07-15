@@ -9,7 +9,6 @@ import { MeerwerkPanel } from "@/components/builder/MeerwerkPanel";
 import { defaultDakCombination, isIsofastProductKey, normalizeDakCombination } from "@/lib/dak-combination";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { ProposalDocument } from "@/components/proposal/ProposalDocument";
-import { AUTH_STORAGE_KEY } from "@/lib/auth";
 import {
   advisors,
   applyDakCombinationToMeasure,
@@ -434,8 +433,7 @@ export function ProposalBuilder({
       <button
         className="fixed right-6 top-4 z-50 flex items-center gap-2 rounded-full border border-fihuma-line bg-white/95 px-4 py-2 text-xs font-black text-[#4a5751] shadow-[0_10px_30px_rgba(23,34,29,0.10)] backdrop-blur transition hover:border-fihuma-green hover:text-fihuma-green"
         onClick={() => {
-          window.localStorage.removeItem(AUTH_STORAGE_KEY);
-          router.replace("/login");
+          void fetch("/api/auth/logout", { method: "POST" }).finally(() => router.replace("/login"));
         }}
         type="button"
       >

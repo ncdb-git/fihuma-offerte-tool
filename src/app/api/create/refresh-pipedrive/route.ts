@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { buildCreateLoadTiming, runWithCreateLoadProfiler } from "@/lib/create-load-profiler";
-import { getProposalConceptById } from "@/lib/proposal-store";
+import { requireProposalAccessById } from "@/lib/proposal-access";
 import { refreshDealProposalFromPipedrive } from "@/lib/pipedrive-sync";
+import { handleApiAuthError, requireRequestSessionUser } from "@/lib/require-api-auth";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   const wallStart = performance.now();
   try {
+    const user = await requireRequestSessionUser();
     const body = (await request.json()) as {
       dealId?: string;
       proposalId?: string;
@@ -21,10 +23,7 @@ export async function POST(request: Request) {
     }
 
     const run = async () => {
-      const existing = await getProposalConceptById(proposalId);
-      if (!existing) {
-        return { ok: false as const, error: "Offerte niet gevonden.", status: 404 };
-      }
+      const existing = await requireProposalAccessById(user, proposalId);
       const { proposal, updated } = await refreshDealProposalFromPipedrive(dealId, existing, {
         force: body.force === true
       });
@@ -35,10 +34,6 @@ export async function POST(request: Request) {
       ? await runWithCreateLoadProfiler(run)
       : { result: await run(), profile: { pipedriveMs: 0, supabaseMs: 0, serverMs: 0, serverTotalMs: 0, spans: [] } };
 
-    if (!result.ok) {
-      return NextResponse.json({ ok: false, error: result.error }, { status: result.status });
-    }
-
     const serverWallMs = Math.round(performance.now() - wallStart);
     return NextResponse.json({
       ok: true,
@@ -48,6 +43,9 @@ export async function POST(request: Request) {
       timing: body.debug ? buildCreateLoadTiming(profile, serverWallMs) : undefined
     });
   } catch (error) {
+    const authResponse = handleApiAuthError(error);
+    if (authResponse) return authResponse;
+
     const message = error instanceof Error ? error.message : "Pipedrive-verversen mislukt.";
     console.error("[create:refresh-pipedrive] fout", error);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
