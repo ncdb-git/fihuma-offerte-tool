@@ -141,7 +141,7 @@
 
 .cover-hero {
   border-radius: 28px;
-  box-shadow: 0 26px 78px rgba(23, 34, 29, 0.16);
+  box-shadow: none;
   flex-shrink: 0;
   height: 340px;
   overflow: hidden;
@@ -150,8 +150,8 @@
 
 .cover-hero::after {
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.08) 0%, rgba(0, 0, 0, 0.2) 100%),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.26) 0%, rgba(0, 0, 0, 0.05) 70%);
+    linear-gradient(180deg, rgba(0, 0, 0, 0.04) 0%, rgba(0, 0, 0, 0.14) 100%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.12) 0%, rgba(0, 0, 0, 0.02) 65%);
   content: "";
   inset: 0;
   pointer-events: none;
@@ -166,26 +166,15 @@
 }
 
 .cover-hero__abstract {
-  background: linear-gradient(118deg, #f6f8f5 0%, #eef3ee 44%, #fbfcf7 100%);
+  background: #f4f7f4;
   height: 100%;
   position: relative;
   width: 100%;
 }
 
-.cover-hero__abstract::before {
-  background: radial-gradient(ellipse 80% 120% at 88% 40%, rgba(200, 223, 100, 0.42) 0%, transparent 58%);
-  content: "";
-  inset: 0;
-  pointer-events: none;
-  position: absolute;
-}
-
+.cover-hero__abstract::before,
 .cover-hero__abstract::after {
-  background: linear-gradient(90deg, rgba(31, 107, 79, 0.07) 0%, transparent 35%);
-  content: "";
-  inset: 0;
-  pointer-events: none;
-  position: absolute;
+  display: none;
 }
 
 .cover-titleBlock {
@@ -261,7 +250,7 @@
   border: 1px solid rgba(218, 224, 219, 0.9);
   border-radius: 22px;
   border-top: 5px solid var(--green);
-  box-shadow: 0 18px 48px rgba(23, 34, 29, 0.08);
+  box-shadow: none;
   padding: 22px 24px 24px;
 }
 
@@ -308,7 +297,7 @@
   background: #fff;
   border: 1px solid rgba(218, 224, 219, 0.86);
   border-radius: 16px;
-  box-shadow: 0 10px 26px rgba(23, 34, 29, 0.045);
+  box-shadow: none;
   padding: 13px 15px 14px;
 }
 
@@ -640,10 +629,10 @@ blockquote cite {
 }
 
 .workflow-panel {
-  background: linear-gradient(180deg, #fbfcfb 0%, #fff 80%);
+  background: #fbfcfb;
   border: 1px solid #edf1ee;
   border-radius: 22px;
-  box-shadow: 0 20px 48px rgba(23, 34, 29, 0.05);
+  box-shadow: none;
   grid-column: 4 / -1;
   padding: 30px 32px 32px;
 }
@@ -925,7 +914,7 @@ blockquote cite {
   border: 1px solid rgba(218, 224, 219, 0.85);
   border-radius: 24px;
   border-top: 5px solid var(--green);
-  box-shadow: 0 16px 42px rgba(23, 34, 29, 0.055);
+  box-shadow: none;
   padding: 26px 28px;
 }
 
@@ -1039,7 +1028,7 @@ blockquote cite {
   border: 1px solid rgba(218, 224, 219, 0.9);
   border-radius: 28px;
   border-top: 6px solid var(--green);
-  box-shadow: 0 26px 68px rgba(23, 34, 29, 0.095);
+  box-shadow: none;
   break-inside: avoid;
   display: flex;
   flex-direction: column;
@@ -1155,10 +1144,10 @@ blockquote cite {
 }
 
 .investment-net--brand {
-  background: linear-gradient(135deg, #1f6b45 0%, #2d8f5c 55%, #3cab6f 100%);
+  background: #1f6b45;
   border: none;
   border-radius: 14px;
-  box-shadow: 0 12px 32px rgba(31, 107, 69, 0.28);
+  box-shadow: none;
   color: #fff;
 }
 
@@ -1320,7 +1309,7 @@ blockquote cite {
 
 .measure-hero {
   border-radius: 22px;
-  box-shadow: 0 24px 60px rgba(23, 34, 29, 0.16);
+  box-shadow: none;
   height: 320px;
   margin: 22px 0 34px;
   overflow: hidden;
@@ -1329,9 +1318,7 @@ blockquote cite {
 }
 
 .measure-hero::after {
-  background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.03) 30%, rgba(0, 0, 0, 0.3) 100%),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.1) 46%, rgba(0, 0, 0, 0.02) 100%);
+  background: linear-gradient(180deg, transparent 42%, rgba(0, 0, 0, 0.38) 100%);
   content: "";
   inset: 0;
   pointer-events: none;
@@ -1346,8 +1333,12 @@ blockquote cite {
   width: 100%;
 }
 
+.measure-hero--spouwmuur {
+  height: 340px;
+}
+
 .measure-hero--spouwmuur .measure-hero__img {
-  object-position: center 34%;
+  object-position: center 18%;
 }
 
 .measure-hero--vloer {
@@ -1484,15 +1475,15 @@ blockquote cite {
 }
 
 .agreement-card-group {
-  background: linear-gradient(180deg, #fbfcfb 0%, #fff 88%);
+  background: #fff;
   border: 1px solid #edf1ee;
   border-radius: 22px;
   border-top: 4px solid var(--green);
   break-inside: avoid;
-  box-shadow: 0 18px 48px rgba(23, 34, 29, 0.045);
-  margin: 24px 0 30px;
+  box-shadow: none;
+  margin: 18px 0 16px;
   page-break-inside: avoid;
-  padding: 26px 28px 28px;
+  padding: 22px 24px 24px;
 }
 
 .agreement-card-group > h3 {
@@ -1536,14 +1527,14 @@ blockquote cite {
 }
 
 .agreement-nextsteps {
-  background: linear-gradient(135deg, #f7faf6 0%, #fff 72%);
-  border: 0;
+  background: #f7faf6;
+  border: 1px solid #e4ece4;
   border-radius: 22px;
   border-top: 4px solid var(--green);
-  box-shadow: 0 18px 46px rgba(23, 34, 29, 0.055);
-  margin: 36px 0 0;
+  box-shadow: none;
+  margin: 0 0 22px;
   max-width: none;
-  padding: 26px 30px 28px;
+  padding: 22px 26px 24px;
   position: relative;
 }
 
@@ -1562,8 +1553,8 @@ blockquote cite {
 }
 
 .agreement-contract-section {
-  margin-top: 36px;
-  padding-top: 18px;
+  margin-top: 8px;
+  padding-top: 0;
 }
 
 .agreement-contract-eyebrow {
@@ -1721,19 +1712,43 @@ blockquote cite {
     -webkit-print-color-adjust: exact;
   }
 
+  /* Chromium PDF rendert box-shadows vaak als grijze/groene blokken. */
+  .proposal-document *,
+  .proposal-document *::before,
+  .proposal-document *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
   .home-summary-card,
   .product-inline-card,
   .text-panel,
   .trust-card,
   .investment-card,
   .investment-card--breakdown,
+  .investment-card--subsidy,
   .investment-net-hero,
+  .investment-net,
+  .investment-net--brand,
   .agreement-card-group,
   .agreement-card-group .text-panel,
   .agreement-nextsteps,
-  .advisor-agreement-card {
-    background: #fff !important;
+  .advisor-agreement-card,
+  .cover-personCard,
+  .cover-infoCard,
+  .measure-block,
+  .workflow-panel {
+    background-image: none !important;
     box-shadow: none !important;
+  }
+
+  .investment-net--brand,
+  .investment-net--total.investment-net--brand {
+    background: #1f6b45 !important;
+  }
+
+  .agreement-nextsteps {
+    background: #f7faf6 !important;
   }
 
   .proposal-page {
@@ -1774,17 +1789,26 @@ blockquote cite {
   }
 
   .cover-hero {
-    height: 315px;
-    margin-bottom: 18px;
+    height: 280px;
+    margin-bottom: 16px;
+  }
+
+  .cover-hero::after {
+    background: linear-gradient(180deg, transparent 55%, rgba(0, 0, 0, 0.18) 100%);
+  }
+
+  .cover-hero .cover-hero__img {
+    object-fit: cover;
+    object-position: center 18%;
   }
 
   .cover-titleBlock {
-    margin-bottom: 18px;
+    margin-bottom: 16px;
     margin-left: 0;
   }
 
   .cover-titleBlock__title {
-    font-size: 3.25rem;
+    font-size: 3.1rem;
     margin-bottom: 8px;
   }
 
@@ -1792,13 +1816,17 @@ blockquote cite {
     font-size: 1rem;
   }
 
+  .cover-cardGrid {
+    gap: 10px;
+  }
+
   .cover-personCard {
-    padding: 18px 20px 20px;
+    padding: 16px 18px 18px;
   }
 
   .cover-personCard h2.cover-personCard__label {
-    font-size: 23px;
-    margin-bottom: 14px;
+    font-size: 22px;
+    margin-bottom: 12px;
   }
 
   .cover-infoCard {
@@ -1902,22 +1930,25 @@ blockquote cite {
   }
 
   .measure-hero {
-    border-radius: 18px;
-    height: 210px;
-    margin: 10px 0 16px;
+    border-radius: 14px;
+    height: 248px;
+    margin: 8px 0 12px;
+  }
+
+  .measure-hero--spouwmuur {
+    height: 268px;
   }
 
   .measure-hero--vloer {
-    height: 240px;
+    height: 260px;
   }
 
-  .measure-hero__copy {
-    bottom: 22px;
-    left: 24px;
+  .measure-hero::after {
+    display: none;
   }
 
-  .measure-hero__copy strong {
-    font-size: 25px;
+  .measure-hero--spouwmuur .measure-hero__img {
+    object-position: center 12%;
   }
 
   .measure-hero__copy {
@@ -1999,7 +2030,8 @@ blockquote cite {
     grid-template-columns: 0.96fr 1.04fr;
   }
 
-  .investment-card--breakdown {
+  .investment-card--breakdown,
+  .investment-card--subsidy {
     padding: 18px 20px;
   }
 
@@ -2020,7 +2052,7 @@ blockquote cite {
   }
 
   .investment-net-hero {
-    min-height: 300px;
+    min-height: 0;
     padding: 26px 28px;
   }
 
@@ -2041,22 +2073,27 @@ blockquote cite {
     padding: 14px 16px;
   }
 
+  .investment-net--total.investment-net--brand {
+    margin-top: 14px;
+    padding: 16px 18px;
+  }
+
   .agreement-full {
-    margin-bottom: 12px;
-  }
-
-  .agreement-card-group {
-    margin: 16px 0 18px;
-    padding: 18px 20px 20px;
-  }
-
-  .agreement-card-group > h3 {
-    font-size: 18px;
     margin-bottom: 10px;
   }
 
+  .agreement-card-group {
+    margin: 12px 0;
+    padding: 14px 16px 16px;
+  }
+
+  .agreement-card-group > h3 {
+    font-size: 17px;
+    margin-bottom: 8px;
+  }
+
   .agreement-card-grid {
-    gap: 10px;
+    gap: 8px;
   }
 
   .agreement-card-grid--planning {
@@ -2065,41 +2102,49 @@ blockquote cite {
 
   .agreement-card-group .text-panel h3 {
     font-size: 10px;
-    margin-bottom: 7px;
+    margin-bottom: 6px;
   }
 
   .agreement-card-group .text-panel {
-    padding: 13px 14px;
+    padding: 11px 12px;
+  }
+
+  .agreement-card-group .text-panel p {
+    font-size: 12.5px;
+    line-height: 1.4;
   }
 
   .agreement-nextsteps {
-    margin-top: 24px;
-    padding: 20px 22px;
+    margin: 0 0 16px;
+    padding: 16px 18px;
   }
 
   .agreement-nextsteps h3 {
-    font-size: 19px;
-    margin-bottom: 8px;
+    font-size: 18px;
+    margin-bottom: 6px;
   }
 
   .agreement-nextsteps p {
-    font-size: 13.5px;
-    line-height: 1.52;
+    font-size: 13px;
+    line-height: 1.45;
   }
 
   .agreement-contract-section {
     break-before: page;
     page-break-before: always;
-    padding-top: 46px;
+    margin-top: 0;
+    padding-top: 0;
   }
 
   .agreement-contract-eyebrow {
     font-size: 12px;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
+    margin-top: 4px;
   }
 
   .agreement-section-title {
     margin-top: 0 !important;
+    margin-bottom: 10px;
   }
 
   .agreement-closing,

@@ -125,8 +125,14 @@ function FihumaLogo({ variant = "page" }: { variant?: "page" | "cover" }) {
 
 function coverHeroForMeasure(measure?: Measure) {
   if (!measure) return null;
+  if (measure.type === "spouwmuur") return "/brand/Images/SPOUWMUUR.jpg";
   if (measure.type === "vloer") return DEFAULT_MEASURE_HERO_SRC;
   if (measure.type === "bodem") return "/brand/Images/BODEM.png";
+  if (measure.type === "dak") {
+    const productKey = measure.productName.trim().toLowerCase();
+    if (productKey.includes("isofast")) return "/brand/Images/PIF%20ISOFAST.jpg";
+    return "/brand/Images/PIF%20ROOF.jpg";
+  }
   return null;
 }
 
@@ -596,12 +602,15 @@ function AgreementPage({ proposal, draft = false }: { proposal: Proposal; draft?
         </div>
       </section>
 
-      <article className="text-panel agreement-full agreement-nextsteps">
-        <h3>Vervolgstappen</h3>
-        <p>Na uw akkoord stemmen wij de planning met u af en ontvangt u een opdrachtbevestiging met de definitieve afspraken. Eventuele subsidieaanvragen begeleiden wij uiteraard in overleg met u.</p>
-      </article>
-
       <section className="agreement-contract-section">
+        <article className="text-panel agreement-full agreement-nextsteps">
+          <h3>Vervolgstappen</h3>
+          <p>
+            Na uw akkoord stemmen wij de planning met u af en ontvangt u een opdrachtbevestiging met de definitieve
+            afspraken. Eventuele subsidieaanvragen begeleiden wij uiteraard in overleg met u.
+          </p>
+        </article>
+
         <p className="agreement-contract-eyebrow">Bedankt voor uw vertrouwen</p>
         <h2 className="agreement-section-title">Overeenkomst</h2>
         <div className="agreement-closing">
