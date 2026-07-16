@@ -28,8 +28,8 @@ const SEED_USERS = [
   { name: "Job in 't Veld", email: "job@fihumacollectief.nl", role: "advisor" },
   { name: "Dylan Batenburg", email: "dylan@fihumacollectief.nl", role: "advisor" },
   { name: "Dick de Groot", email: "dick@fihumacollectief.nl", role: "advisor" },
-  { name: "Oktay", email: "oktay@fihumacollectief.nl", role: "advisor" },
-  { name: "Kay", email: "kay@fihumacollectief.nl", role: "advisor" }
+  { name: "Oktay Kayan", email: "oktay@fihumacollectief.nl", role: "advisor" },
+  { name: "Kay den Haan", email: "kay@fihumacollectief.nl", role: "advisor" }
 ];
 
 function generateSecurePassword(length = 18) {

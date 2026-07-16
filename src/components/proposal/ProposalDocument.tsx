@@ -537,6 +537,7 @@ function AgreementPage({ proposal, draft = false }: { proposal: Proposal; draft?
     : isdeLegacy;
 
   return (
+    <>
     <ProposalPageShell className="agreement-page">
       <p className="eyebrow">Akkoord en vervolgstappen</p>
       <h2>Vervolg en afspraken</h2>
@@ -609,50 +610,55 @@ function AgreementPage({ proposal, draft = false }: { proposal: Proposal; draft?
           afspraken. Eventuele subsidieaanvragen begeleiden wij uiteraard in overleg met u.
         </p>
       </article>
+    </ProposalPageShell>
 
-      <section className="agreement-contract-section">
-        <p className="agreement-contract-eyebrow">Bedankt voor uw vertrouwen</p>
-        <h2 className="agreement-section-title">Overeenkomst</h2>
-        <div className="agreement-closing">
-          <p>Wij hopen dat het voorstel goed aansluit bij uw woning en wensen, en helpen u graag richting een comfortabelere en energiezuinigere woning.</p>
-          <p>Beide partijen verklaren zich akkoord met de inhoud van de offerte en de algemene voorwaarden.</p>
-        </div>
+    <ProposalPageShell className="agreement-page agreement-page--contract">
+      <p className="eyebrow">Bedankt voor uw vertrouwen</p>
+      <h2>Overeenkomst</h2>
+      <div className="agreement-closing">
+        <p>
+          Wij hopen dat het voorstel goed aansluit bij uw woning en wensen, en helpen u graag richting een
+          comfortabelere en energiezuinigere woning.
+        </p>
+        <p>Beide partijen verklaren zich akkoord met de inhoud van de offerte en de algemene voorwaarden.</p>
+      </div>
 
-        <div className="advisor-agreement-card">
-          <span>Namens Fihuma Isolatie BV</span>
-          <strong>{proposal.advisor.name}</strong>
-        </div>
+      <div className="advisor-agreement-card">
+        <span>Namens Fihuma Isolatie BV</span>
+        <strong>{proposal.advisor.name}</strong>
+      </div>
 
-        {priorForm ? (
-          <article className="text-panel agreement-full">
-            <p>{PRIOR_APPROVAL_NOTICE}</p>
-            {proposal.agreement.priorApprovalDate ? (
-              <p>
-                <strong>Akkoorddatum:</strong> {nlDateLong(proposal.agreement.priorApprovalDate)}
-              </p>
-            ) : null}
-          </article>
-        ) : (
-          <div className="signature-block">
-            <p className="signature-block__intro">Akkoord voor uitvoering conform deze offerte:</p>
-            <div className="signature-grid">
-              <div>
-                <span>{formatCustomerSalutation(proposal.customer)}</span>
-              </div>
-              <div>
-                <span>Handtekening en datum</span>
-              </div>
+      {priorForm ? (
+        <article className="text-panel agreement-full">
+          <p>{PRIOR_APPROVAL_NOTICE}</p>
+          {proposal.agreement.priorApprovalDate ? (
+            <p>
+              <strong>Akkoorddatum:</strong> {nlDateLong(proposal.agreement.priorApprovalDate)}
+            </p>
+          ) : null}
+        </article>
+      ) : (
+        <div className="signature-block">
+          <p className="signature-block__intro">Akkoord voor uitvoering conform deze offerte:</p>
+          <div className="signature-grid">
+            <div>
+              <span>{formatCustomerSalutation(proposal.customer)}</span>
+            </div>
+            <div>
+              <span>Handtekening en datum</span>
             </div>
           </div>
-        )}
-      </section>
+        </div>
+      )}
 
       <p className="agreement-legal-small">
-        Op alle offertes, aanbiedingen en overeenkomsten met Fihuma Isolatie BV. zijn haar algemene voorwaarden van toepassing. Deze voorwaarden worden steeds bij toezending
-        van de offerte/aanbieding verstrekt en staan vermeld op onze website www.fihuma.nl. Tevens zijn deze voorwaarden gedeponeerd bij de Kamer van Koophandel te Rotterdam
+        Op alle offertes, aanbiedingen en overeenkomsten met Fihuma Isolatie BV. zijn haar algemene voorwaarden van
+        toepassing. Deze voorwaarden worden steeds bij toezending van de offerte/aanbieding verstrekt en staan vermeld
+        op onze website www.fihuma.nl. Tevens zijn deze voorwaarden gedeponeerd bij de Kamer van Koophandel te Rotterdam
         onder nummer: 65652711.
       </p>
     </ProposalPageShell>
+    </>
   );
 }
 
