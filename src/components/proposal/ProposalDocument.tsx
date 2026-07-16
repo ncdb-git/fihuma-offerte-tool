@@ -602,15 +602,15 @@ function AgreementPage({ proposal, draft = false }: { proposal: Proposal; draft?
         </div>
       </section>
 
-      <section className="agreement-contract-section">
-        <article className="text-panel agreement-full agreement-nextsteps">
-          <h3>Vervolgstappen</h3>
-          <p>
-            Na uw akkoord stemmen wij de planning met u af en ontvangt u een opdrachtbevestiging met de definitieve
-            afspraken. Eventuele subsidieaanvragen begeleiden wij uiteraard in overleg met u.
-          </p>
-        </article>
+      <article className="text-panel agreement-full agreement-nextsteps">
+        <h3>Vervolgstappen</h3>
+        <p>
+          Na uw akkoord stemmen wij de planning met u af en ontvangt u een opdrachtbevestiging met de definitieve
+          afspraken. Eventuele subsidieaanvragen begeleiden wij uiteraard in overleg met u.
+        </p>
+      </article>
 
+      <section className="agreement-contract-section">
         <p className="agreement-contract-eyebrow">Bedankt voor uw vertrouwen</p>
         <h2 className="agreement-section-title">Overeenkomst</h2>
         <div className="agreement-closing">
