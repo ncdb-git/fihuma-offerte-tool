@@ -1,9 +1,18 @@
 import {
-  dakSquareMetersForSubsidy,
   isIsofastProductKey,
   normalizeDakCombination,
   syncDakCombinationExtraWork
 } from "@/lib/dak-combination";
+import {
+  applyFinancialsToMeasure,
+  applyFinancialsToProposal,
+  buildSubsidyLines,
+  calculateIsdeForMeasure,
+  calculateProposalFinancials,
+  extractNipEuro,
+  getEffectiveNetInvestment,
+  isdeSubsidyExplanation
+} from "@/lib/subsidy-engine";
 import { Advisor, Customer, IsdeSubsidyStatus, Measure, MoneyLine, Proposal } from "@/lib/types";
 
 export const OFFER_VALID_DAYS = 14;
@@ -259,36 +268,21 @@ export const subsidyRules: Record<Measure["type"], { single: number; double: num
   dak: { single: 16.25, double: 32.5, min: 20, max: 200 }
 };
 
-export function isdeSubsidyExplanation(status: IsdeSubsidyStatus) {
-  if (status === "double-fihuma") {
-    return "Voor deze maatregel is rekening gehouden met de verhoogde ISDE-subsidie voor meerdere verduurzamingsmaatregelen binnen dezelfde woning.";
-  }
-  if (status === "double-previous") {
-    return "Voor deze maatregel is rekening gehouden met de verhoogde ISDE-subsidie doordat deze gecombineerd wordt met een eerder uitgevoerde verduurzamingsmaatregel.";
-  }
-  return "Voor deze maatregel is een ISDE-subsidie van toepassing op basis van een uitgevoerde verduurzamingsmaatregel.";
-}
+export { isdeSubsidyExplanation };
 
 export function calculateIsdeSubsidy(measure: Pick<Measure, "type" | "squareMeters" | "subsidyStatus" | "dakCombination">) {
   const status = measure.subsidyStatus ?? "single";
-  const rule = subsidyRules[measure.type];
-  let squareMeters = Math.max(0, Number(measure.squareMeters) || 0);
-  if (measure.type === "dak" && measure.dakCombination) {
-    squareMeters = dakSquareMetersForSubsidy(measure as Measure);
-  }
-  const eligibleSquareMeters = squareMeters < rule.min ? 0 : Math.min(squareMeters, rule.max);
-  const rate = status === "single" ? rule.single : rule.double;
-  const amount = Math.round(eligibleSquareMeters * rate * 100) / 100;
+  const isde = calculateIsdeForMeasure(measure, status);
   return {
-    amount,
-    eligibleSquareMeters,
-    explanation: isdeSubsidyExplanation(status),
-    isCapped: squareMeters > rule.max,
-    isTooSmall: squareMeters > 0 && squareMeters < rule.min,
-    max: rule.max,
-    min: rule.min,
-    rate,
-    status
+    amount: isde.amount,
+    eligibleSquareMeters: isde.eligibleSquareMeters,
+    explanation: isde.explanation,
+    isCapped: isde.isCapped,
+    isTooSmall: isde.isTooSmall,
+    max: isde.maxM2,
+    min: isde.minM2,
+    rate: isde.rate,
+    status: isde.status
   };
 }
 
@@ -323,13 +317,20 @@ export function calculateNetInvestment(measure: Measure) {
   return measureBrutoTotal(measure) + subsidies + measureAdjustmentsTotal(measure);
 }
 
-export function applyAutomaticIsdeSubsidy(measure: Measure, nipEuro = 0): Measure {
-  const isde = calculateIsdeSubsidy(measure);
-  const next = {
-    ...measure,
-    subsidies: configuratorSubsidies(isde.amount, nipEuro, `ISDE subsidie (${isde.eligibleSquareMeters} m² × ${money(isde.rate)})`)
-  };
-  return { ...next, netInvestment: calculateNetInvestment(next) };
+export function applyAutomaticIsdeSubsidy(measure: Measure, nipEuro?: number): Measure {
+  const measureInput =
+    nipEuro === undefined
+      ? measure
+      : {
+          ...measure,
+          subsidies: buildSubsidyLines(
+            calculateIsdeForMeasure(measure, measure.subsidyStatus ?? "single").amount,
+            nipEuro,
+            `ISDE subsidie`
+          )
+        };
+  const result = calculateProposalFinancials({ measures: [measureInput] } as Proposal);
+  return applyFinancialsToMeasure(measureInput, result);
 }
 
 export function normalizeMeasure(measure: Measure): Measure {
@@ -389,17 +390,31 @@ export function finalizeMeasureForStore(measure: Measure): Measure {
   return applyAutomaticIsdeSubsidy(normalized);
 }
 
-export function finalizeProposalForStore(proposal: Proposal): Proposal {
-  return {
+export function finalizeProposalForStore(
+  proposal: Proposal,
+  context?: { siblingProposals?: Proposal[] }
+): Proposal {
+  const normalized = {
     ...proposal,
-    measures: (proposal.measures ?? []).map(finalizeMeasureForStore)
+    measures: (proposal.measures ?? []).map(normalizeMeasure)
   };
+
+  if (!normalized.measures.some(measureHasPricing)) {
+    return {
+      ...normalized,
+      measures: normalized.measures.map((measure) => ({ ...measure, subsidies: [], netInvestment: 0 }))
+    };
+  }
+
+  return applyFinancialsToProposal(normalized, {
+    combinationProposalIds: normalized.subsidyCombinationProposalIds ?? [],
+    siblingProposals: context?.siblingProposals ?? []
+  });
 }
 
 /** Netto voor werkvoorraad — toont null zolang er geen prijs is ingevuld. */
 export function proposalDashboardNetTotal(proposal: Proposal): number | null {
-  if (!proposal.measures.some(measureHasPricing)) return null;
-  return proposal.measures.reduce((sum, measure) => sum + measure.netInvestment, 0);
+  return getEffectiveNetInvestment(proposal);
 }
 
 /** Verwijdert oude demo-presetbedragen uit eerdere Pipedrive-imports. */
@@ -653,10 +668,7 @@ export function formatLetterGreeting(customer: Customer): string {
 }
 
 export function configuratorSubsidies(isdeEuro: number, nipEuro: number, isdeDescription = "ISDE subsidie"): MoneyLine[] {
-  const lines: MoneyLine[] = [];
-  if (isdeEuro > 0) lines.push({ id: "cfg-isde", description: isdeDescription, amount: -Math.abs(isdeEuro) });
-  if (nipEuro > 0) lines.push({ id: "cfg-nip", description: "NIP / gemeentelijke subsidie", amount: -Math.abs(nipEuro) });
-  return lines;
+  return buildSubsidyLines(isdeEuro, nipEuro, isdeDescription);
 }
 
 export function getProductKeyForMeasure(measure: Measure): string {

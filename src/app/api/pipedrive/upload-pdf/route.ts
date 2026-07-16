@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { formatProposalPdfFilename } from "@/lib/proposal-engine";
+import { prepareProposalWithSnapshot } from "@/lib/prepare-proposal-snapshot";
 import { renderProposalPdf } from "@/lib/pdf-renderer";
 import { addDealNote, markDealOfferReady, moveDealToStage, uploadProposalPdf } from "@/lib/pipedrive";
 import { isPipedriveDealId } from "@/lib/proposal-store-ids";
@@ -27,9 +28,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, mode: "demo", message: "PIPEDRIVE_API_TOKEN ontbreekt; upload is gesimuleerd." });
     }
 
-    const pdf = await renderProposalPdf(proposal);
-    const filename = formatProposalPdfFilename(proposal);
-    const fileResult = await uploadProposalPdf(proposal, new Blob([new Uint8Array(pdf)], { type: "application/pdf" }), filename);
+    const withSnapshot = await prepareProposalWithSnapshot(proposal, "pipedrive_upload");
+    const pdf = await renderProposalPdf(withSnapshot);
+    const filename = formatProposalPdfFilename(withSnapshot);
+    const fileResult = await uploadProposalPdf(withSnapshot, new Blob([new Uint8Array(pdf)], { type: "application/pdf" }), filename);
     await addDealNote(dealId, "Definitieve offerte gegenereerd en toegevoegd.");
     const labelResult = await markDealOfferReady(dealId);
 
@@ -39,7 +41,7 @@ export async function POST(request: Request) {
       stageResult = await moveDealToStage(dealId, returnStageId);
     }
 
-    await upsertProposalConcept({ ...proposal, status: "Geüpload naar Pipedrive" }, "upload");
+    await upsertProposalConcept({ ...withSnapshot, status: "Geüpload naar Pipedrive" }, "upload");
 
     const domain = process.env.PIPEDRIVE_COMPANY_DOMAIN?.trim();
     const dealUrl = domain ? `https://${domain}.pipedrive.com/deal/${dealId}` : `https://app.pipedrive.com/deal/${dealId}`;

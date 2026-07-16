@@ -67,6 +67,83 @@ export type DakInvestmentLine = {
   amount: number;
 };
 
+export type CalculationSnapshotTrigger = "pdf_generate" | "email_send" | "pipedrive_upload";
+
+export type CalculationWarningCode =
+  | "NET_INVESTMENT_NEGATIVE"
+  | "NET_INVESTMENT_ZERO"
+  | "ISDE_BELOW_MINIMUM_M2"
+  | "ISDE_CAPPED_AT_MAX_M2"
+  | "NIP_MANUAL_OVERRIDE"
+  | "DOUBLE_STATUS_COMBINED";
+
+export type CalculationWarning = {
+  code: CalculationWarningCode;
+  measureId?: string;
+  message: string;
+  severity: "info" | "warning";
+};
+
+export type IsdeBreakdown = {
+  status: IsdeSubsidyStatus;
+  squareMeters: number;
+  eligibleSquareMeters: number;
+  rate: number;
+  amount: number;
+  isCapped: boolean;
+  isTooSmall: boolean;
+  minM2: number;
+  maxM2: number;
+  explanation: string;
+};
+
+export type MeasureFinancialResult = {
+  measureId: string;
+  measureType: MeasureType;
+  bruto: {
+    grossInvestment: number;
+    extraWork: number;
+    adjustments: number;
+    bruto: number;
+    payableToFihuma: number;
+  };
+  isde: IsdeBreakdown;
+  nipEuro: number;
+  subsidies: MoneyLine[];
+  totalSubsidies: number;
+  netInvestment: number;
+};
+
+export type ProposalFinancialTotals = {
+  bruto: number;
+  adjustments: number;
+  payableToFihuma: number;
+  isde: number;
+  nip: number;
+  totalSubsidies: number;
+  netInvestment: number;
+  isNegative: boolean;
+  isZero: boolean;
+};
+
+export type SubsidyCalculationResult = {
+  measures: MeasureFinancialResult[];
+  totals: ProposalFinancialTotals;
+  combinedMeasureCount: number;
+  combinationProposalIds: string[];
+  warnings: CalculationWarning[];
+};
+
+export type CalculationSnapshot = {
+  id: string;
+  engineVersion: string;
+  tariffSetVersion: string;
+  calculatedAt: string;
+  trigger: CalculationSnapshotTrigger;
+  combinationProposalIds: string[];
+  result: SubsidyCalculationResult;
+};
+
 export type Measure = {
   id: string;
   type: MeasureType;
@@ -131,4 +208,8 @@ export type Proposal = {
     priorApprovalDate?: string | null;
   };
   measures: Measure[];
+  /** Offerte-ids voor gezamenlijke ISDE (alleen gezet in de toekomstige verzendflow). */
+  subsidyCombinationProposalIds?: string[];
+  /** Vastgelegde berekening bij PDF/e-mail/Pipedrive (bron voor dashboard/PDF). */
+  calculationSnapshot?: CalculationSnapshot;
 };

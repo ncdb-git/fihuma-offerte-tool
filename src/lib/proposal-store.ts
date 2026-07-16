@@ -357,13 +357,33 @@ export async function upsertProposalConcept(proposal: Proposal, source: UpsertSo
   const storageKey = storageKeyForProposal(proposal);
   const existingConcept = await getProposalConceptById(proposal.id);
 
-  let nextProposal = finalizeProposalForStore({
-    ...proposal,
-    measures: proposal.measures.map(normalizeMeasure)
-  });
+  let siblingProposals: Proposal[] = [];
+  const combinationIds = proposal.subsidyCombinationProposalIds ?? [];
+  if (combinationIds.length > 0 && isPipedriveDealId(dealId)) {
+    const siblings = await listProposalsByDealId(dealId);
+    siblingProposals = siblings.map((entry) => entry.proposal).filter((entry) => entry.id !== proposal.id);
+  }
+
+  let nextProposal = finalizeProposalForStore(
+    {
+      ...proposal,
+      measures: proposal.measures.map(normalizeMeasure)
+    },
+    { siblingProposals }
+  );
 
   if (source === "webhook" && existingConcept && shouldPreserveWorkflow(existingConcept.status)) {
     nextProposal = mergePipedriveRefresh(existingConcept, nextProposal);
+  }
+
+  // Bewerking in de configurator: live bedragen; snapshot alleen vastleggen bij PDF/upload/mail.
+  if (source === "advisor") {
+    const { calculationSnapshot: _cleared, ...withoutSnapshot } = nextProposal;
+    nextProposal = withoutSnapshot;
+  } else if ((source === "pdf" || source === "upload") && proposal.calculationSnapshot) {
+    nextProposal = { ...nextProposal, calculationSnapshot: proposal.calculationSnapshot };
+  } else if (source === "webhook" && existingConcept?.calculationSnapshot) {
+    nextProposal = { ...nextProposal, calculationSnapshot: existingConcept.calculationSnapshot };
   }
 
   const status = resolveStatusOnUpsert(nextProposal, existingConcept, source);

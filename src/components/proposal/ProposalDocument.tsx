@@ -14,6 +14,7 @@ import {
   PAYMENT_TERM_OPTIONS,
   PRIOR_APPROVAL_NOTICE
 } from "@/lib/proposal-engine";
+import { getMeasureFinancialFromSnapshot } from "@/lib/subsidy-engine";
 import { Measure, Proposal } from "@/lib/types";
 import { Fragment } from "react";
 
@@ -331,7 +332,18 @@ function cleanSubsidyDescription(description: string) {
   return description.replace(/\s+indicatie\b/i, "").replace(/\s*\([^)]*\)\s*$/, "");
 }
 
-function InvestmentTable({ measure, paymentTerms }: { measure: Measure; paymentTerms: string }) {
+function InvestmentTable({
+  proposal,
+  measure,
+  paymentTerms
+}: {
+  proposal: Proposal;
+  measure: Measure;
+  paymentTerms: string;
+}) {
+  const snapshotMeasure = getMeasureFinancialFromSnapshot(proposal, measure.id);
+  const subsidies = snapshotMeasure?.subsidies ?? measure.subsidies;
+  const netInvestment = snapshotMeasure?.netInvestment ?? measure.netInvestment;
   const brutoTotal = measureBrutoTotal(measure);
   const adjustmentsTotal = measureAdjustmentsTotal(measure);
   const payableToFihuma = brutoTotal + adjustmentsTotal;
@@ -407,7 +419,7 @@ function InvestmentTable({ measure, paymentTerms }: { measure: Measure; paymentT
             <span className="investment-table__desc">Bruto investering</span>
             <strong className="investment-table__amt">{money(payableToFihuma)}</strong>
           </div>
-          {measure.subsidies.map((row) => (
+          {subsidies.map((row) => (
             <div className="investment-table__row investment-table__row--credit" key={row.id}>
               <span className="investment-table__desc">{cleanSubsidyDescription(row.description)}</span>
               <strong className="investment-table__amt">− {money(Math.abs(row.amount))}</strong>
@@ -417,7 +429,7 @@ function InvestmentTable({ measure, paymentTerms }: { measure: Measure; paymentT
 
         <div className="investment-net investment-net--total investment-net--brand">
           <span className="investment-net__label">Uw netto investering na ontvangst subsidie bedraagt</span>
-          <strong className="investment-net__value">{money(measure.netInvestment)}</strong>
+          <strong className="investment-net__value">{money(netInvestment)}</strong>
         </div>
       </section>
     </div>
@@ -495,7 +507,7 @@ function InvestmentPage({ proposal, measure }: { proposal: Proposal; measure: Me
       <p className="lead lead--wide">
         Hieronder ziet u de prijsopbouw, het bedrag dat u aan ons betaalt en uw netto investering na verrekening van subsidies.
       </p>
-      <InvestmentTable measure={measure} paymentTerms={proposal.agreement.paymentTerms} />
+      <InvestmentTable measure={measure} paymentTerms={proposal.agreement.paymentTerms} proposal={proposal} />
     </ProposalPageShell>
   );
 }
@@ -504,7 +516,19 @@ function AgreementPage({ proposal, draft = false }: { proposal: Proposal; draft?
   const validUntil = offerValidUntilLabel(proposal.createdAt);
   const priorForm = proposal.agreement.approvalMethod === "prior-form";
   const measure = proposal.measures[0];
-  const isde = measure && !draft ? calculateIsdeSubsidy(measure) : null;
+  const snapshotMeasure = measure ? getMeasureFinancialFromSnapshot(proposal, measure.id) : null;
+  const isdeLegacy = measure && !draft ? calculateIsdeSubsidy(measure) : null;
+  const isde = snapshotMeasure?.isde
+    ? {
+        amount: snapshotMeasure.isde.amount,
+        eligibleSquareMeters: snapshotMeasure.isde.eligibleSquareMeters,
+        explanation: snapshotMeasure.isde.explanation,
+        isTooSmall: snapshotMeasure.isde.isTooSmall,
+        isCapped: snapshotMeasure.isde.isCapped,
+        min: snapshotMeasure.isde.minM2,
+        max: snapshotMeasure.isde.maxM2
+      }
+    : isdeLegacy;
 
   return (
     <ProposalPageShell className="agreement-page">

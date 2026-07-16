@@ -6,17 +6,13 @@ import { AdjustmentsPanel } from "@/components/builder/AdjustmentsPanel";
 import { ConfiguratorSummary } from "@/components/builder/ConfiguratorSummary";
 import { DakCombinationPanel, initialDakCombinationForIsofast } from "@/components/builder/DakCombinationPanel";
 import { MeerwerkPanel } from "@/components/builder/MeerwerkPanel";
-import { defaultDakCombination, isIsofastProductKey, normalizeDakCombination } from "@/lib/dak-combination";
+import { defaultDakCombination, isIsofastProductKey, normalizeDakCombination, syncDakCombinationExtraWork } from "@/lib/dak-combination";
 import { NumberInput } from "@/components/ui/NumberInput";
 import { ProposalDocument } from "@/components/proposal/ProposalDocument";
 import {
   advisors,
-  applyDakCombinationToMeasure,
   applyProductToMeasure,
   buildModuleExtraWork,
-  calculateIsdeSubsidy,
-  calculateNetInvestment,
-  configuratorSubsidies,
   createBlankMeasure,
   defaultModules,
   formatProposalPdfFilename,
@@ -34,6 +30,7 @@ import {
   type BuilderModules
 } from "@/lib/proposal-engine";
 import { proposalDisplayTitle } from "@/lib/proposal-engine";
+import { applyFinancialsToMeasure, calculateProposalFinancials } from "@/lib/subsidy-engine";
 import { isPipedriveDealId } from "@/lib/proposal-store-ids";
 import { Measure, MeasureType, Proposal, Salutation } from "@/lib/types";
 import { mergeAdvisorVisiblePipedriveFields } from "@/lib/pipedrive-proposal-merge";
@@ -75,13 +72,29 @@ function rebuildMeasure(
   parts: { modules: BuilderModules; nip: number; productKey: string }
 ): Measure {
   const extraWork = buildModuleExtraWork(measure.type, parts.modules, measure.id);
+  let base: Measure = { ...measure, extraWork };
+
   if (measure.type === "dak" && isIsofastProductKey(parts.productKey)) {
-    return applyDakCombinationToMeasure(measure, parts.productKey, extraWork, parts.nip);
+    const combo = normalizeDakCombination(measure);
+    base = {
+      ...base,
+      dakCombination: combo,
+      extraWork: syncDakCombinationExtraWork({ ...base, dakCombination: combo }, extraWork)
+    };
   }
-  const isde = calculateIsdeSubsidy(measure);
-  const subsidies = configuratorSubsidies(isde.amount, parts.nip, `ISDE subsidie (${isde.eligibleSquareMeters} m² × ${money(isde.rate)})`);
-  const next: Measure = { ...measure, extraWork, subsidies };
-  return { ...next, netInvestment: calculateNetInvestment(next) };
+
+  const nipLines =
+    parts.nip > 0
+      ? [{ id: "cfg-nip", description: "NIP / gemeentelijke subsidie", amount: -Math.abs(parts.nip) }]
+      : [];
+  const withNip: Measure = {
+    ...base,
+    subsidies: [...base.subsidies.filter((line) => line.id !== "cfg-nip"), ...nipLines]
+  };
+
+  // Configurator: altijd enkelvoudige berekening. Combinatie volgt later in de verzendflow.
+  const result = calculateProposalFinancials({ measures: [withNip] } as Proposal);
+  return applyFinancialsToMeasure(withNip, result);
 }
 
 type SiblingProposal = {
@@ -137,7 +150,11 @@ export function ProposalBuilder({
   const brutoTotal = measure ? measureBrutoTotal(measure) : 0;
 
   const nip = measure ? subsidyPositive(measure, "cfg-nip") : 0;
-  const isdeCalculation = measure ? calculateIsdeSubsidy(measure) : null;
+  const financialPreview = useMemo(() => {
+    if (!measure) return null;
+    return calculateProposalFinancials({ ...proposal, measures: [measure] });
+  }, [measure, proposal]);
+  const isdeCalculation = financialPreview?.measures[0]?.isde ?? null;
 
   useEffect(() => {
     if (!measure) return;
@@ -852,12 +869,12 @@ export function ProposalBuilder({
                     </p>
                     {isdeCalculation.isTooSmall ? (
                       <p className="rounded-lg bg-amber-50 px-2 py-1 font-bold text-amber-800">
-                        Voor {MEASURE_TYPE_LABELS[measure.type].toLowerCase()} geldt een minimale oppervlakte van {isdeCalculation.min} m² voor subsidie.
+                        Voor {MEASURE_TYPE_LABELS[measure.type].toLowerCase()} geldt een minimale oppervlakte van {isdeCalculation.minM2} m² voor subsidie.
                       </p>
                     ) : null}
                     {isdeCalculation.isCapped ? (
                       <p className="rounded-lg bg-fihuma-mint px-2 py-1 font-bold text-fihuma-green">
-                        Voor {MEASURE_TYPE_LABELS[measure.type].toLowerCase()} wordt subsidie berekend over maximaal {isdeCalculation.max} m².
+                        Voor {MEASURE_TYPE_LABELS[measure.type].toLowerCase()} wordt subsidie berekend over maximaal {isdeCalculation.maxM2} m².
                       </p>
                     ) : null}
                   </div>

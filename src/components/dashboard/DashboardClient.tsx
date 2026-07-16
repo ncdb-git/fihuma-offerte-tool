@@ -59,7 +59,6 @@ export function DashboardClient() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [advisorFilter, setAdvisorFilter] = useState("all");
-  const [advisorFilterReady, setAdvisorFilterReady] = useState(false);
   const [statusFilter, setStatusFilter] = useState("active");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
@@ -133,7 +132,6 @@ export function DashboardClient() {
       } else {
         setAdvisorFilter("all");
       }
-      setAdvisorFilterReady(true);
     })();
   }, []);
 
@@ -170,7 +168,6 @@ export function DashboardClient() {
   }, []);
 
   const filteredRecords = useMemo(() => {
-    if (!advisorFilterReady) return [];
     const query = searchQuery.trim().toLowerCase();
     return records.filter((record) => {
       const { proposal } = record;
@@ -204,7 +201,7 @@ export function DashboardClient() {
 
       return true;
     });
-  }, [records, searchQuery, advisorFilter, statusFilter, advisorFilterReady]);
+  }, [records, searchQuery, advisorFilter, statusFilter]);
 
   const customerGroups = useMemo(() => groupDashboardProposals(filteredRecords), [filteredRecords]);
 
