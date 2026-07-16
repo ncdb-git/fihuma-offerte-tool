@@ -5,10 +5,10 @@ import {
   applyFinancialsToProposal,
   calculateCombinedFinancials,
   calculateProposalFinancials,
-  createCalculationSnapshot,
   extractNipEuro,
   getEffectiveNetInvestment
 } from "@/lib/subsidy-engine";
+import { createCalculationSnapshot } from "@/lib/subsidy-engine/server";
 import type { Measure, Proposal } from "@/lib/types";
 
 function baseProposal(measures: Measure[], extra: Partial<Proposal> = {}): Proposal {

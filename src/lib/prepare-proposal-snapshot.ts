@@ -1,10 +1,7 @@
 import "server-only";
 
-import {
-  attachSnapshotToProposal,
-  calculateCombinedFinancials,
-  createCalculationSnapshot
-} from "@/lib/subsidy-engine";
+import { calculateCombinedFinancials } from "@/lib/subsidy-engine";
+import { attachSnapshotToProposal, createCalculationSnapshot } from "@/lib/subsidy-engine/server";
 import type { CalculationSnapshotTrigger, Proposal } from "@/lib/types";
 
 /**

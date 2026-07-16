@@ -1,4 +1,5 @@
-export { applyFinancialsToMeasure, applyFinancialsToProposal, attachSnapshotToProposal } from "@/lib/subsidy-engine/apply";
+/** Client-safe Subsidy Engine API. Snapshot creation lives in `./server`. */
+export { applyFinancialsToMeasure, applyFinancialsToProposal } from "@/lib/subsidy-engine/apply";
 export {
   calculateCombinedFinancials,
   calculateMeasureFinancials,
@@ -9,11 +10,10 @@ export {
 export { calculateIsdeForMeasure, isdeSquareMeters, isdeSubsidyExplanation, measureIsdeEligible } from "@/lib/subsidy-engine/isde";
 export { buildSubsidyLines, extractNipEuro } from "@/lib/subsidy-engine/nip";
 export {
-  createCalculationSnapshot,
   getEffectiveNetInvestment,
   getMeasureFinancialFromSnapshot,
   getSnapshotNetInvestment
-} from "@/lib/subsidy-engine/snapshot";
+} from "@/lib/subsidy-engine/snapshot-read";
 export { ISDE_TARIFFS_2026 } from "@/lib/subsidy-engine/tariffs-2026";
 export {
   SUBSIDY_ENGINE_VERSION,
